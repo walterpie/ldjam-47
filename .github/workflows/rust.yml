@@ -24,6 +24,9 @@ jobs:
       with:
         toolchain: ${{ matrix.rust_toolchain }}
         override: true
+    - name: Install deps
+      run: apt-get install libasound2-dev
+      if: ${{ matrix.os }} == 'ubuntu-latest'
     - name: Build
       run: cargo build --verbose
     - name: Test
@@ -38,7 +41,10 @@ jobs:
             toolchain: nightly
             components: clippy, rustfmt
             override: true
-
+      - name: Install deps
+        run: apt-get install libasound2-dev
+        if: ${{ matrix.os }} == 'ubuntu-latest'
+      
       - name: Check for lints
         uses: actions-rs/clippy-check@v1
         with:
