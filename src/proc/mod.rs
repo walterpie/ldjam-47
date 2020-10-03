@@ -6,6 +6,7 @@ use rand::distributions::{Distribution, Standard};
 use rand::Rng;
 use rapier3d::dynamics::RigidBodyBuilder;
 use rapier3d::geometry::ColliderBuilder;
+use rapier3d::math::*;
 use rapier3d::na::{Translation3, UnitQuaternion, Vector3};
 
 use crate::navmesh::*;
@@ -181,6 +182,14 @@ pub fn spawn(
                 Door::West => Quat::from_rotation_y(-90.0_f32.to_radians()),
             };
             let translation = rotation * translation;
+            let rotation = match door {
+                Door::North => AngVector::new(0.0, 0.0, 0.0),
+                Door::South => AngVector::new(0.0, 180.0_f32.to_radians(), 0.0),
+                Door::East => AngVector::new(0.0, 90.0_f32.to_radians(), 0.0),
+                Door::West => AngVector::new(0.0, -90.0_f32.to_radians(), 0.0),
+            };
+            let mesh = meshes.get(&phys_door).unwrap();
+            let navmesh = Navmesh::from(mesh);
             commands
                 .spawn(PbrComponents {
                     draw: Draw {
@@ -189,10 +198,15 @@ pub fn spawn(
                     },
                     mesh: prop_door,
                     material: materials.add(Color::rgb(1.0, 1.0, 1.0).into()),
-                    transform: Transform::from_translation_rotation(translation, rotation),
                     ..Default::default()
                 })
-                .with(Parent(current));
+                .with(Parent(current))
+                .with(
+                    RigidBodyBuilder::new_static()
+                        .translation(translation.x(), translation.y(), translation.z())
+                        .rotation(rotation),
+                )
+                .with(ColliderBuilder::trimesh(navmesh.vertices, navmesh.indices));
         }
     }
 

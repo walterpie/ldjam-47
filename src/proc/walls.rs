@@ -17,7 +17,7 @@ pub fn generate(w: f32, h: f32, d: f32, doors: &HashSet<Door>) -> Mesh {
     let mut n = 0;
 
     // floor
-    positions.extend(&[[w, 0.0, -d], [-w, 0.0, -d], [-w, 0.0, d], [w, 0.0, d]]);
+    positions.extend(&[[-w, 0.0, d], [w, 0.0, d], [w, 0.0, -d], [-w, 0.0, -d]]);
     normals.extend(&[
         [0.0, 1.0, 0.0],
         [0.0, 1.0, 0.0],
