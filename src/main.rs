@@ -1,30 +1,32 @@
+#![allow(incomplete_features)]
+#![feature(const_generics)]
+
 use std::mem;
 
 use bevy::prelude::*;
 use bevy_fly_camera::{FlyCamera, FlyCameraPlugin};
-use bevy_rapier3d::physics::*;
-use rapier3d::dynamics::RigidBodyBuilder;
-use rapier3d::dynamics::RigidBodySet;
-use rapier3d::geometry::ColliderBuilder;
 
 use character::*;
+use phys::*;
 use proc::*;
 use room::*;
 
+pub mod array;
 pub mod character;
-pub mod navmesh;
+pub mod phys;
 pub mod proc;
 pub mod room;
 
 fn main() {
     App::build()
-        .add_plugin(RapierPhysicsPlugin)
         .add_default_plugins()
         .add_plugin(FlyCameraPlugin)
+        .init_resource::<Friction>()
         .add_startup_system(setup.system())
         .add_system(room_system.system())
         .add_system(visible_parent_system.system())
         .add_system(character_controller_system.system())
+        .add_system(physics_system.system())
         .run();
 }
 
@@ -38,12 +40,12 @@ fn setup(
         .load_sync(&mut meshes, "assets/mesh/char_player.gltf")
         .unwrap();
     let mut character = None;
-    let mut dynamic = None;
     commands
         .spawn(CharBundle {
             controller: Character::default(),
-            body: RigidBodyBuilder::new_kinematic().translation(0.0, 3.0, 0.0),
-            collider: ColliderBuilder::cuboid(0.5, 1.0, 0.5),
+            body: RigidBody::new(Status::Semikinematic, 1.0, 0.5)
+                .position(Vec2::new(0.0, 0.0))
+                .shape(Vec2::zero(), 0.5, 0.5),
         })
         .with_bundle(PbrComponents {
             mesh: char_player,
@@ -51,12 +53,6 @@ fn setup(
             ..Default::default()
         })
         .for_current_entity(|e| character = Some(e))
-        .spawn((
-            CharacterDynamics,
-            RigidBodyBuilder::new_dynamic().translation(0.0, 3.0, 0.0),
-            ColliderBuilder::cuboid(0.5, 1.0, 0.5),
-        ))
-        .for_current_entity(|e| dynamic = Some(e))
         .spawn(LightComponents {
             transform: Transform::from_translation(Vec3::new(4.0, 5.0, 4.0)),
             ..Default::default()
@@ -84,27 +80,30 @@ fn setup(
 pub fn room_system(
     mut commands: Commands,
     current: Res<CurrentRoom>,
-    mut bodies: ResMut<RigidBodySet>,
     query: Query<Without<ActiveRoom, (&Edges, &Name)>>,
-    connected: Query<(&RigidBodyHandleComponent, Mut<Draw>)>,
+    connected: Query<(Mut<RigidBody>, Mut<Draw>)>,
 ) {
     let current = current.entity;
     if let Ok(name) = query.get::<Name>(current) {
         let mut draw = connected.get_mut::<Draw>(current).unwrap();
         draw.is_visible = true;
+        connected
+            .get_mut::<RigidBody>(current)
+            .unwrap()
+            .set_active(true);
         commands.insert_one(current, ActiveRoom);
         eprintln!("* Entering {:?}", name.get());
     }
 
     if let Ok(edges) = query.get::<Edges>(current) {
         for edge in edges.iter() {
-            let body = connected
-                .get::<RigidBodyHandleComponent>(edge.entity())
-                .unwrap();
-            bodies
-                .get_mut(body.handle())
-                .unwrap()
-                .set_position(edge.isometry());
+            let position = Vec2::new(edge.isometry().0.x(), edge.isometry().0.z());
+            // NOTE: assumes quat is (0, 1, 0, theta)
+            let rotation = edge.isometry().1.to_axis_angle().1;
+            let mut body = connected.get_mut::<RigidBody>(edge.entity()).unwrap();
+            body.set_active(true);
+            body.position = position;
+            body.rotation = rotation;
             let mut draw = connected.get_mut::<Draw>(edge.entity()).unwrap();
             draw.is_visible = true;
         }

@@ -4,12 +4,8 @@ use bevy::prelude::*;
 use hashbrown::{HashMap, HashSet};
 use rand::distributions::{Distribution, Standard};
 use rand::Rng;
-use rapier3d::dynamics::RigidBodyBuilder;
-use rapier3d::geometry::ColliderBuilder;
-use rapier3d::math::*;
-use rapier3d::na::{Translation3, UnitQuaternion, Vector3};
 
-use crate::navmesh::*;
+use crate::phys::*;
 use crate::room::*;
 
 pub mod walls;
@@ -60,12 +56,12 @@ impl Door {
         degrees.to_radians()
     }
 
-    pub fn origin(self) -> Vector3<f32> {
+    pub fn origin(self) -> Vec3 {
         match self {
-            Self::North => Vector3::new(0.0, 0.0, -1.0),
-            Self::South => Vector3::new(0.0, 0.0, 1.0),
-            Self::East => Vector3::new(-1.0, 0.0, 0.0),
-            Self::West => Vector3::new(1.0, 0.0, 0.0),
+            Self::North => Vec3::new(0.0, 0.0, -1.0),
+            Self::South => Vec3::new(0.0, 0.0, 1.0),
+            Self::East => Vec3::new(-1.0, 0.0, 0.0),
+            Self::West => Vec3::new(1.0, 0.0, 0.0),
         }
     }
 }
@@ -148,13 +144,54 @@ pub fn spawn(
             &room.doors,
         ));
         let mesh = meshes.get(&handle).unwrap();
-        let navmesh = Navmesh::from(mesh);
         let mut current = None;
+        let mut body = RigidBody::new(Status::Static, INF_MASS, 0.5);
+        body.set_active(false);
+        if room.doors.contains(&Door::North) {
+            let o1 = Vec2::new(-room.width / 2.0, -room.depth / 2.0 - 0.1);
+            let o2 = Vec2::new(0.5, -room.depth / 2.0 - 0.1);
+            body =
+                body.shape(o1, room.width / 2.0 - 0.5, 0.1)
+                    .shape(o2, room.width / 2.0 - 0.5, 0.1);
+        } else {
+            let offset = Vec2::new(-room.width / 2.0, -room.depth / 2.0 - 0.1);
+            body = body.shape(offset, room.width, 0.1);
+        }
+        if room.doors.contains(&Door::South) {
+            let o1 = Vec2::new(-room.width / 2.0, room.depth / 2.0);
+            let o2 = Vec2::new(0.5, room.depth / 2.0);
+            body =
+                body.shape(o1, room.width / 2.0 - 0.5, 0.1)
+                    .shape(o2, room.width / 2.0 - 0.5, 0.1);
+        } else {
+            let offset = Vec2::new(-room.width / 2.0, room.depth / 2.0);
+            body = body.shape(offset, room.width, 0.1);
+        }
+        if room.doors.contains(&Door::East) {
+            let o1 = Vec2::new(-room.width / 2.0 - 0.1, -room.depth / 2.0);
+            let o2 = Vec2::new(-room.width / 2.0 - 0.1, 0.5);
+            body =
+                body.shape(o1, 0.1, room.depth / 2.0 - 0.5)
+                    .shape(o2, 0.1, room.depth / 2.0 - 0.5);
+        } else {
+            let offset = Vec2::new(-room.width / 2.0 - 0.1, -room.depth / 2.0);
+            body = body.shape(offset, 0.1, room.depth);
+        }
+        if room.doors.contains(&Door::West) {
+            let o1 = Vec2::new(room.width / 2.0, -room.depth / 2.0);
+            let o2 = Vec2::new(room.width / 2.0, 0.5);
+            body =
+                body.shape(o1, 0.1, room.depth / 2.0 - 0.5)
+                    .shape(o2, 0.1, room.depth / 2.0 - 0.5);
+        } else {
+            let offset = Vec2::new(room.width / 2.0, -room.depth / 2.0);
+            body = body.shape(offset, 0.1, room.depth);
+        }
+
         commands
             .spawn(RoomBundle {
                 name: Name::new("Unnamed".to_string()),
-                body: RigidBodyBuilder::new_static(),
-                collider: ColliderBuilder::trimesh(navmesh.vertices, navmesh.indices),
+                body,
             })
             .with_bundle(PbrComponents {
                 draw: Draw {
@@ -183,13 +220,12 @@ pub fn spawn(
             };
             let translation = rotation * translation;
             let rotation = match door {
-                Door::North => AngVector::new(0.0, 0.0, 0.0),
-                Door::South => AngVector::new(0.0, 180.0_f32.to_radians(), 0.0),
-                Door::East => AngVector::new(0.0, 90.0_f32.to_radians(), 0.0),
-                Door::West => AngVector::new(0.0, -90.0_f32.to_radians(), 0.0),
+                Door::North => 0.0,
+                Door::South => 180.0_f32.to_radians(),
+                Door::East => 90.0_f32.to_radians(),
+                Door::West => -90.0_f32.to_radians(),
             };
             let mesh = meshes.get(&phys_door).unwrap();
-            let navmesh = Navmesh::from(mesh);
             commands
                 .spawn(PbrComponents {
                     draw: Draw {
@@ -202,11 +238,10 @@ pub fn spawn(
                 })
                 .with(Parent(current))
                 .with(
-                    RigidBodyBuilder::new_static()
-                        .translation(translation.x(), translation.y(), translation.z())
+                    RigidBody::new(Status::Static, INF_MASS, 0.5)
+                        .position(Vec2::new(translation.x(), translation.z()))
                         .rotation(rotation),
-                )
-                .with(ColliderBuilder::trimesh(navmesh.vertices, navmesh.indices));
+                );
         }
     }
 
@@ -232,28 +267,28 @@ pub fn spawn(
         let prototype = &level.rooms[edge.i].edges[edge.index];
 
         let rotation = prototype.from.rotation(prototype.to);
-        let rotation = UnitQuaternion::from_euler_angles(0.0, rotation, 0.0);
+        let rotation = Quat::from_rotation_y(rotation);
 
-        let i_size = Vector3::new(i.width / 2.0, i.height / 2.0, i.depth / 2.0);
-        let j_size = Vector3::new(j.width / 2.0, j.height / 2.0, j.depth / 2.0);
+        let i_size = Vec3::new(i.width / 2.0, i.height / 2.0, i.depth / 2.0);
+        let j_size = Vec3::new(j.width / 2.0, j.height / 2.0, j.depth / 2.0);
 
         let origin = match (prototype.from, prototype.to) {
-            (Door::North, Door::North) => Translation3::new(0.0, 0.0, -(i_size.z + j_size.z)),
-            (Door::North, Door::South) => Translation3::new(0.0, 0.0, -(i_size.z + j_size.z)),
-            (Door::North, Door::East) => Translation3::new(0.0, 0.0, -(i_size.z + j_size.x)),
-            (Door::North, Door::West) => Translation3::new(0.0, 0.0, -(i_size.z + j_size.x)),
-            (Door::South, Door::North) => Translation3::new(0.0, 0.0, i_size.z + j_size.z),
-            (Door::South, Door::South) => Translation3::new(0.0, 0.0, i_size.z + j_size.z),
-            (Door::South, Door::East) => Translation3::new(0.0, 0.0, i_size.z + j_size.x),
-            (Door::South, Door::West) => Translation3::new(0.0, 0.0, i_size.z + j_size.x),
-            (Door::East, Door::North) => Translation3::new(-(i_size.x + j_size.z), 0.0, 0.0),
-            (Door::East, Door::South) => Translation3::new(-(i_size.x + j_size.z), 0.0, 0.0),
-            (Door::East, Door::East) => Translation3::new(-(i_size.x + j_size.x), 0.0, 0.0),
-            (Door::East, Door::West) => Translation3::new(-(i_size.x + j_size.x), 0.0, 0.0),
-            (Door::West, Door::North) => Translation3::new(i_size.x + j_size.z, 0.0, 0.0),
-            (Door::West, Door::South) => Translation3::new(i_size.x + j_size.z, 0.0, 0.0),
-            (Door::West, Door::East) => Translation3::new(i_size.x + j_size.x, 0.0, 0.0),
-            (Door::West, Door::West) => Translation3::new(i_size.x + j_size.x, 0.0, 0.0),
+            (Door::North, Door::North) => Vec3::new(0.0, 0.0, -(i_size.z() + j_size.z())),
+            (Door::North, Door::South) => Vec3::new(0.0, 0.0, -(i_size.z() + j_size.z())),
+            (Door::North, Door::East) => Vec3::new(0.0, 0.0, -(i_size.z() + j_size.x())),
+            (Door::North, Door::West) => Vec3::new(0.0, 0.0, -(i_size.z() + j_size.x())),
+            (Door::South, Door::North) => Vec3::new(0.0, 0.0, i_size.z() + j_size.z()),
+            (Door::South, Door::South) => Vec3::new(0.0, 0.0, i_size.z() + j_size.z()),
+            (Door::South, Door::East) => Vec3::new(0.0, 0.0, i_size.z() + j_size.x()),
+            (Door::South, Door::West) => Vec3::new(0.0, 0.0, i_size.z() + j_size.x()),
+            (Door::East, Door::North) => Vec3::new(-(i_size.x() + j_size.z()), 0.0, 0.0),
+            (Door::East, Door::South) => Vec3::new(-(i_size.x() + j_size.z()), 0.0, 0.0),
+            (Door::East, Door::East) => Vec3::new(-(i_size.x() + j_size.x()), 0.0, 0.0),
+            (Door::East, Door::West) => Vec3::new(-(i_size.x() + j_size.x()), 0.0, 0.0),
+            (Door::West, Door::North) => Vec3::new(i_size.x() + j_size.z(), 0.0, 0.0),
+            (Door::West, Door::South) => Vec3::new(i_size.x() + j_size.z(), 0.0, 0.0),
+            (Door::West, Door::East) => Vec3::new(i_size.x() + j_size.x(), 0.0, 0.0),
+            (Door::West, Door::West) => Vec3::new(i_size.x() + j_size.x(), 0.0, 0.0),
         };
 
         edges

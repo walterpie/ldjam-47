@@ -1,8 +1,6 @@
 use bevy::prelude::*;
-use rapier3d::dynamics::RigidBodyBuilder;
-use rapier3d::geometry::ColliderBuilder;
-use rapier3d::math::*;
-use rapier3d::na::{Translation3, UnitQuaternion};
+
+use crate::phys::*;
 
 #[derive(Debug)]
 pub struct CurrentRoom {
@@ -15,8 +13,7 @@ pub struct ActiveRoom;
 #[derive(Bundle)]
 pub struct RoomBundle {
     pub name: Name,
-    pub body: RigidBodyBuilder,
-    pub collider: ColliderBuilder,
+    pub body: RigidBody,
 }
 
 #[derive(Debug)]
@@ -65,14 +62,16 @@ impl Edges {
 #[derive(Debug)]
 pub struct Room {
     entity: Entity,
-    isometry: Isometry<f32>,
+    position: Vec3,
+    rotation: Quat,
 }
 
 impl Room {
     pub fn new(entity: Entity) -> Self {
         Self {
             entity,
-            isometry: Isometry::identity(),
+            position: Vec3::zero(),
+            rotation: Quat::identity(),
         }
     }
 
@@ -80,17 +79,17 @@ impl Room {
         self.entity
     }
 
-    pub fn isometry(&self) -> Isometry<f32> {
-        self.isometry
+    pub fn isometry(&self) -> (Vec3, Quat) {
+        (self.position, self.rotation)
     }
 
-    pub fn origin(mut self, origin: Translation3<f32>) -> Self {
-        self.isometry.translation = origin;
+    pub fn origin(mut self, origin: Vec3) -> Self {
+        self.position = origin;
         self
     }
 
-    pub fn rotation(mut self, rotation: UnitQuaternion<f32>) -> Self {
-        self.isometry.rotation = rotation;
+    pub fn rotation(mut self, rotation: Quat) -> Self {
+        self.rotation = rotation;
         self
     }
 }
