@@ -2,6 +2,7 @@ use std::mem;
 
 use bevy::math::*;
 use bevy::prelude::*;
+use bevy::render::{mesh::*, pipeline::PrimitiveTopology, prelude::*};
 use itertools::Itertools;
 
 use crate::array::Array;
@@ -95,9 +96,13 @@ impl RigidBody {
     }
 
     pub fn aabbs(self) -> impl Iterator<Item = Aabb> + Clone {
-        self.shape.into_iter().map(move |shape| Aabb {
-            min: self.position + shape.offset - Vec2::new(shape.width, shape.height) * 0.5,
-            max: self.position + shape.offset + Vec2::new(shape.width, shape.height) * 0.5,
+        self.shape.into_iter().map(move |shape| {
+            let mut min = self.position + shape.offset;
+            let mut max = self.position + shape.offset + Vec2::new(shape.width, shape.height);
+            let rotation = Mat2::from_angle(self.rotation);
+            min = rotation * min;
+            max = rotation * max;
+            Aabb { min, max }
         })
     }
 }
@@ -265,5 +270,64 @@ pub fn physics_system(
         let mut transform = query.get_mut::<Transform>(e).unwrap();
         transform.set_translation(Vec3::new(b.position.x(), 0.0, b.position.y()));
         transform.set_rotation(Quat::from_rotation_y(b.rotation));
+    }
+}
+
+pub struct DebugDraw;
+
+pub fn debug_draw_system(
+    mut commands: Commands,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<StandardMaterial>>,
+    mut query: Query<Without<DebugDraw, (Entity, &RigidBody)>>,
+) {
+    for (e, body) in &mut query.iter() {
+        let mut positions = Vec::new();
+        let mut normals = Vec::new();
+        let mut uvs = Vec::new();
+        let mut indices = Vec::new();
+        for aabb in body.aabbs() {
+            let min = aabb.min - body.position;
+            let max = aabb.max - body.position;
+            let v0 = Vec3::new(min.x(), 4.0, min.y());
+            let v1 = Vec3::new(min.x(), 4.0, max.y());
+            let v2 = Vec3::new(max.x(), 4.0, max.y());
+            let v3 = Vec3::new(max.x(), 4.0, min.y());
+            let p = &[v0.into(), v1.into(), v2.into(), v3.into()];
+            let n = &[
+                [0.0, 1.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 1.0, 0.0],
+                [0.0, 1.0, 0.0],
+            ];
+            let u = &[[0.0, 0.0], [0.0, 0.0], [0.0, 0.0], [0.0, 0.0]];
+            let c = positions.len() as u32;
+            positions.extend(p);
+            normals.extend(n);
+            uvs.extend(u);
+            indices.extend(&[c + 0, c + 1]);
+            indices.extend(&[c + 1, c + 2]);
+            indices.extend(&[c + 2, c + 3]);
+            indices.extend(&[c + 3, c + 0]);
+        }
+        let attributes = vec![
+            VertexAttribute::position(positions),
+            VertexAttribute::normal(normals),
+            VertexAttribute::uv(uvs),
+        ];
+        let mesh = Mesh {
+            primitive_topology: PrimitiveTopology::LineList,
+            attributes,
+            indices: Some(indices),
+        };
+        let handle = meshes.add(mesh);
+        commands
+            .spawn(PbrComponents {
+                mesh: handle,
+                material: materials.add(Color::rgb(1.0, 0.0, 0.0).into()),
+                ..Default::default()
+            })
+            .with(Parent(e))
+            .insert_one(e, DebugDraw);
     }
 }

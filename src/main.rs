@@ -28,6 +28,7 @@ fn main() {
         .add_system(visible_parent_system.system())
         .add_system(character_controller_system.system())
         .add_system(physics_system.system())
+        .add_system(debug_draw_system.system())
         .run();
 }
 
