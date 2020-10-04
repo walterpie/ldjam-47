@@ -12,11 +12,17 @@ pub struct ActiveRoom;
 
 pub struct RoomMarker;
 
+#[derive(Default, Debug)]
+pub struct DoorSet {
+    pub vec: Vec<Entity>,
+}
+
 #[derive(Bundle)]
 pub struct RoomBundle {
     pub marker: RoomMarker,
     pub name: Name,
     pub body: RigidBody,
+    pub props: Props,
 }
 
 #[derive(Debug)]
@@ -60,6 +66,11 @@ impl Edges {
     pub fn iter(&self) -> impl Iterator<Item = &Room> {
         self.edges.iter()
     }
+}
+
+#[derive(Debug)]
+pub struct Props {
+    pub vec: Vec<Entity>,
 }
 
 #[derive(Debug)]

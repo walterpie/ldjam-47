@@ -67,7 +67,9 @@ fn setup(
         .spawn(SensorBundle {
             global_transform: Default::default(),
             transform: Default::default(),
-            controller: Sensor::default(),
+            controller: Sensor {
+                character: character.unwrap(),
+            },
             body: sensor_body,
         })
         .for_current_entity(|e| sensor = Some(e))
@@ -100,44 +102,40 @@ fn setup(
         min_size: 4.0,
         max_size: 16.0,
         min_height: 2.0,
-        max_height: 4.0,
-        clone_probability: 0.3,
+        max_height: 2.0,
+        clone_probability: 1.0,
     };
-    //let level = proc::generate(&params);
-    let level = LevelPrototype {
-        start: 0,
-        rooms: vec![
-            RoomPrototype {
-                width: 8.0,
-                height: 2.0,
-                depth: 8.0,
-                doors: vec![Door::North].into_iter().collect(),
-                edges: vec![EdgePrototype {
-                    index: 1,
-                    from: Door::North,
-                    to: Door::East,
-                }],
-            },
-            RoomPrototype {
-                width: 8.0,
-                height: 2.0,
-                depth: 8.0,
-                doors: vec![Door::North].into_iter().collect(),
-                edges: vec![EdgePrototype {
-                    index: 0,
-                    from: Door::North,
-                    to: Door::East,
-                }],
-            },
-        ],
-    };
+    let level = proc::generate(&params);
+    // let level = LevelPrototype {
+    //     start: 0,
+    //     rooms: vec![
+    //         RoomPrototype {
+    //             width: 8.0,
+    //             height: 2.0,
+    //             depth: 8.0,
+    //             doors: vec![Door::South].into_iter().collect(),
+    //             edges: vec![EdgePrototype {
+    //                 index: 1,
+    //                 from: Door::South,
+    //                 to: Door::North,
+    //             }],
+    //         },
+    //         RoomPrototype {
+    //             width: 8.0,
+    //             height: 2.0,
+    //             depth: 8.0,
+    //             doors: vec![].into_iter().collect(),
+    //             edges: vec![],
+    //         },
+    //     ],
+    // };
     proc::spawn(&mut commands, &assets, &mut meshes, &mut materials, &level);
 }
 
 pub fn room_system(
     mut commands: Commands,
     current: Res<CurrentRoom>,
-    query: Query<(&Edges, &Name)>,
+    mut query: Query<(Entity, &Edges, &Name)>,
     mut is_active: Query<&ActiveRoom>,
     connected: Query<(Mut<RigidBody>, Mut<Draw>)>,
     mut rooms: Query<With<RoomMarker, Entity>>,
@@ -146,8 +144,9 @@ pub fn room_system(
     let any_active = is_active.iter().iter().count() != 0;
     if !any_active {
         for (e, mut connection) in &mut connections.iter() {
+            let mut body = connected.get_mut::<RigidBody>(e).unwrap();
+            body.set_active(false);
             if connection.open {
-                let mut body = connected.get_mut::<RigidBody>(e).unwrap();
                 body.rotation -= 90.0_f32.to_radians();
                 let rot = Mat2::from_angle(body.rotation);
                 let offset = rot * Vec2::new(0.5, 0.5);
@@ -188,6 +187,13 @@ pub fn room_system(
             draw.is_visible = true;
         }
     }
+
+    if let Ok(doorset) = query.get::<DoorSet>(current) {
+        for &e in &doorset.vec {
+            let mut body = connected.get_mut::<RigidBody>(e).unwrap();
+            body.set_active(true);
+        }
+    }
 }
 
 pub fn visible_parent_system(
@@ -202,15 +208,6 @@ pub fn visible_parent_system(
             let is_visible = parent.is_visible;
             mem::drop(parent);
             drawables.get_mut::<Draw>(e).unwrap().is_visible = is_visible;
-        }
-    }
-    for (e, parent) in &mut body_parents.iter() {
-        if let Ok(parent) = bodies.get::<RigidBody>(**parent) {
-            let is_active = parent.is_active();
-            mem::drop(parent);
-            if let Ok(mut body) = bodies.get_mut::<RigidBody>(e) {
-                body.set_active(is_active);
-            }
         }
     }
     for conn in &mut connections.iter() {

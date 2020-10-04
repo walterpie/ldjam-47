@@ -12,6 +12,7 @@ pub mod walls;
 
 #[derive(Debug, Clone, Copy)]
 pub struct Connection {
+    pub this: Entity,
     pub room: Entity,
     pub sensor: Entity,
     pub open: bool,
@@ -109,6 +110,7 @@ pub struct RoomPrototype {
     pub height: f32,
     pub doors: HashSet<Door>,
     pub edges: Vec<EdgePrototype>,
+    pub props: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -236,10 +238,10 @@ pub fn spawn(
 
         let current = current.unwrap();
 
-        let w = room.width - 0.8;
-        let h = room.depth - 0.8;
+        let w = room.width - 1.5;
+        let h = room.depth - 1.5;
         let mut body = RigidBody::new(Status::Static, INF_MASS, 0.5).shape(
-            Vec2::new(-room.width / 2.0, -room.depth / 2.0),
+            Vec2::new(-w / 2.0, -h / 2.0),
             w,
             h,
         );
@@ -262,7 +264,7 @@ pub fn spawn(
         sensors.insert(current, sensor);
     }
 
-    let (_, current, _) = edges[level.start];
+    let current = rooms[&level.start];
     commands.insert_resource(CurrentRoom { entity: current });
 
     let mut dcg = Vec::new();
@@ -278,6 +280,9 @@ pub fn spawn(
 
     let edge_map = edges;
     let mut edges: HashMap<Entity, (usize, Edges)> = HashMap::new();
+    for (&i, &e) in &rooms {
+        edges.insert(e, (i, Edges::default()));
+    }
 
     for edge in dcg.edges {
         let i = &level.rooms[edge.i];
@@ -323,6 +328,8 @@ pub fn spawn(
 
         let current = entity;
 
+        let mut doorset = Vec::new();
+
         for &door in &room.doors {
             let mut j = None;
             for edge in &room.edges {
@@ -348,13 +355,14 @@ pub fn spawn(
             let rotation = match door {
                 Door::North => 0.0,
                 Door::South => 180.0_f32.to_radians(),
-                Door::East => -90.0_f32.to_radians(),
-                Door::West => 90.0_f32.to_radians(),
+                Door::East => 90.0_f32.to_radians(),
+                Door::West => -90.0_f32.to_radians(),
             };
             let mut body = RigidBody::new(Status::Static, INF_MASS, 0.5)
                 .position(position)
                 .rotation(rotation)
                 .shape(Vec2::new(-0.5, 0.0), width, height);
+            body.set_active(false);
             commands
                 .spawn(PbrComponents {
                     draw: Draw {
@@ -367,14 +375,18 @@ pub fn spawn(
                 })
                 .with_bundle(DoorBundle {
                     connection: Connection {
+                        this: current,
                         room: conn,
                         sensor,
                         open: false,
                     },
                 })
                 .with(Parent(current))
-                .with(body);
+                .with(body)
+                .for_current_entity(|e| doorset.push(e));
         }
+
+        commands.insert_one(current, DoorSet { vec: doorset });
     }
 }
 
@@ -421,7 +433,10 @@ pub fn generate(params: &Parameters) -> LevelPrototype {
     for (i, room) in rooms.iter_mut().enumerate() {
         let n = 1 + rand::random::<usize>() % 3;
         while room.doors.len() < n {
-            room.doors.insert(rand::random());
+            let door = rand::random();
+            if !room.doors.contains(&door) {
+                room.doors.insert(door);
+            }
         }
         let mut edges = Vec::new();
         for &from in &room.doors {
