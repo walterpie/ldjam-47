@@ -10,14 +10,27 @@ use crate::room::*;
 
 pub mod walls;
 
-#[derive(Default, Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct Connection {
+    pub room: Entity,
+    pub sensor: Entity,
     pub open: bool,
 }
 
 #[derive(Bundle)]
 pub struct DoorBundle {
     connection: Connection,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct RoomSensor(pub Entity);
+
+#[derive(Bundle)]
+pub struct RoomSensorBundle {
+    sensor: RoomSensor,
+    transform: Transform,
+    global_transform: GlobalTransform,
+    body: RigidBody,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -145,6 +158,8 @@ pub fn spawn(
         .load_sync(meshes, "assets/mesh/phys_door.gltf")
         .unwrap();
     let mut edges = Vec::new();
+    let mut rooms = HashMap::new();
+    let mut sensors = HashMap::new();
 
     for (i, room) in level.rooms.iter().enumerate() {
         let handle = meshes.add(walls::generate(
@@ -155,6 +170,7 @@ pub fn spawn(
         ));
         let mesh = meshes.get(&handle).unwrap();
         let mut current = None;
+        let mut sensor = None;
         let mut body = RigidBody::new(Status::Static, INF_MASS, 0.5);
         body.set_active(false);
         if room.doors.contains(&Door::North) {
@@ -200,6 +216,7 @@ pub fn spawn(
 
         commands
             .spawn(RoomBundle {
+                marker: RoomMarker,
                 name: Name::new("Unnamed".to_string()),
                 body,
             })
@@ -216,41 +233,33 @@ pub fn spawn(
                 current = Some(e);
                 edges.push((i, e, room.edges.clone()));
             });
+
         let current = current.unwrap();
-        for &door in &room.doors {
-            let position = match door {
-                Door::North => Vec2::new(0.0, -room.depth / 2.0),
-                Door::South => Vec2::new(0.0, room.depth / 2.0),
-                Door::East => Vec2::new(-room.width / 2.0, 0.0),
-                Door::West => Vec2::new(room.width / 2.0, 0.0),
-            };
-            let (width, height) = (1.0, 0.1);
-            let rotation = match door {
-                Door::North => 0.0,
-                Door::South => 180.0_f32.to_radians(),
-                Door::East => -90.0_f32.to_radians(),
-                Door::West => 90.0_f32.to_radians(),
-            };
-            let mut body = RigidBody::new(Status::Static, INF_MASS, 0.5)
-                .position(position)
-                .rotation(rotation)
-                .shape(Vec2::new(-0.5, 0.0), width, height);
-            commands
-                .spawn(PbrComponents {
-                    draw: Draw {
-                        is_visible: false,
-                        ..Default::default()
-                    },
-                    mesh: prop_door,
-                    material: materials.add(Color::rgb(1.0, 1.0, 1.0).into()),
-                    ..Default::default()
-                })
-                .with_bundle(DoorBundle {
-                    connection: Connection::default(),
-                })
-                .with(Parent(current))
-                .with(body);
-        }
+
+        let w = room.width - 0.8;
+        let h = room.depth - 0.8;
+        let mut body = RigidBody::new(Status::Static, INF_MASS, 0.5).shape(
+            Vec2::new(-room.width / 2.0, -room.depth / 2.0),
+            w,
+            h,
+        );
+        body.set_active(false);
+        body.set_sensor(true);
+        commands
+            .spawn(RoomSensorBundle {
+                sensor: RoomSensor(current),
+                transform: Default::default(),
+                global_transform: Default::default(),
+                body,
+            })
+            .for_current_entity(|e| {
+                sensor = Some(e);
+            });
+        let sensor = sensor.unwrap();
+        commands.spawn((Joint::new(current, sensor),));
+
+        rooms.insert(i, current);
+        sensors.insert(current, sensor);
     }
 
     let (_, current, _) = edges[level.start];
@@ -267,7 +276,8 @@ pub fn spawn(
 
     let dcg = Dcg::new(dcg);
 
-    let mut edges: HashMap<Entity, Edges> = HashMap::new();
+    let edge_map = edges;
+    let mut edges: HashMap<Entity, (usize, Edges)> = HashMap::new();
 
     for edge in dcg.edges {
         let i = &level.rooms[edge.i];
@@ -299,14 +309,72 @@ pub fn spawn(
             (Door::West, Door::West) => Vec3::new(i_size.x() + j_size.x(), 0.0, 0.0),
         };
 
-        edges
-            .entry(edge.a)
-            .or_default()
+        let new = edges.entry(edge.a).or_default();
+        new.0 = edge.i;
+        new.1
             .add_mut(Room::new(edge.b).origin(origin).rotation(rotation));
     }
 
-    for (entity, edge) in edges {
+    let mut created = HashSet::new();
+
+    for (entity, (i, edge)) in edges {
+        let room = &level.rooms[i];
         commands.insert_one(entity, edge);
+
+        let current = entity;
+
+        for &door in &room.doors {
+            let mut j = None;
+            for edge in &room.edges {
+                if edge.from == door {
+                    j = Some(edge.index);
+                }
+            }
+
+            if created.contains(&(i, j)) {
+                continue;
+            }
+            created.insert((i, j));
+
+            let conn = rooms[&j.unwrap()];
+            let sensor = sensors[&conn];
+            let position = match door {
+                Door::North => Vec2::new(0.0, -room.depth / 2.0),
+                Door::South => Vec2::new(0.0, room.depth / 2.0),
+                Door::East => Vec2::new(-room.width / 2.0, 0.0),
+                Door::West => Vec2::new(room.width / 2.0, 0.0),
+            };
+            let (width, height) = (1.0, 0.1);
+            let rotation = match door {
+                Door::North => 0.0,
+                Door::South => 180.0_f32.to_radians(),
+                Door::East => -90.0_f32.to_radians(),
+                Door::West => 90.0_f32.to_radians(),
+            };
+            let mut body = RigidBody::new(Status::Static, INF_MASS, 0.5)
+                .position(position)
+                .rotation(rotation)
+                .shape(Vec2::new(-0.5, 0.0), width, height);
+            commands
+                .spawn(PbrComponents {
+                    draw: Draw {
+                        is_visible: false,
+                        ..Default::default()
+                    },
+                    mesh: prop_door,
+                    material: materials.add(Color::rgb(1.0, 1.0, 1.0).into()),
+                    ..Default::default()
+                })
+                .with_bundle(DoorBundle {
+                    connection: Connection {
+                        room: conn,
+                        sensor,
+                        open: false,
+                    },
+                })
+                .with(Parent(current))
+                .with(body);
+        }
     }
 }
 

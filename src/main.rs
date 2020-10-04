@@ -3,6 +3,7 @@
 
 use std::mem;
 
+use bevy::math::*;
 use bevy::prelude::*;
 use bevy::render::camera::*;
 use bevy::render::render_graph::base::camera::CAMERA3D;
@@ -27,13 +28,13 @@ fn main() {
         .init_resource::<SensorListenerState>()
         .add_event::<Manifold>()
         .add_startup_system(setup.system())
-        .add_system(room_system.system())
-        .add_system(visible_parent_system.system())
-        .add_system(character_controller_system.system())
-        .add_system(sensor_system.system())
-        .add_system(physics_system.system())
-        .add_system(joints_system.system())
-        .add_system(debug_draw_system.system())
+        .add_system_to_stage(stage::LAST, room_system.system())
+        .add_system_to_stage(stage::LAST, visible_parent_system.system())
+        .add_system_to_stage(stage::FIRST, character_controller_system.system())
+        .add_system_to_stage(stage::POST_UPDATE, sensor_system.system())
+        .add_system_to_stage(stage::UPDATE, physics_system.system())
+        .add_system_to_stage(stage::UPDATE, joints_system.system())
+        .add_system_to_stage(stage::UPDATE, debug_draw_system.system())
         .run();
 }
 
@@ -72,9 +73,10 @@ fn setup(
         .for_current_entity(|e| sensor = Some(e))
         .spawn((Joint::new(character.unwrap(), sensor.unwrap()),))
         .spawn(LightComponents {
-            transform: Transform::from_translation(Vec3::new(4.0, 5.0, 4.0)),
+            transform: Transform::from_translation(Vec3::new(0.0, 1.6, 0.0)),
             ..Default::default()
         })
+        .with(Parent(character.unwrap()))
         .spawn(Camera3dComponents {
             transform: Transform::from_translation(Vec3::new(0.0, 1.6, 0.0)),
             camera: Camera {
@@ -101,26 +103,76 @@ fn setup(
         max_height: 4.0,
         clone_probability: 0.3,
     };
-    let level = proc::generate(&params);
+    //let level = proc::generate(&params);
+    let level = LevelPrototype {
+        start: 0,
+        rooms: vec![
+            RoomPrototype {
+                width: 8.0,
+                height: 2.0,
+                depth: 8.0,
+                doors: vec![Door::North].into_iter().collect(),
+                edges: vec![EdgePrototype {
+                    index: 1,
+                    from: Door::North,
+                    to: Door::East,
+                }],
+            },
+            RoomPrototype {
+                width: 8.0,
+                height: 2.0,
+                depth: 8.0,
+                doors: vec![Door::North].into_iter().collect(),
+                edges: vec![EdgePrototype {
+                    index: 0,
+                    from: Door::North,
+                    to: Door::East,
+                }],
+            },
+        ],
+    };
     proc::spawn(&mut commands, &assets, &mut meshes, &mut materials, &level);
 }
 
 pub fn room_system(
     mut commands: Commands,
     current: Res<CurrentRoom>,
-    query: Query<Without<ActiveRoom, (&Edges, &Name)>>,
+    query: Query<(&Edges, &Name)>,
+    mut is_active: Query<&ActiveRoom>,
     connected: Query<(Mut<RigidBody>, Mut<Draw>)>,
+    mut rooms: Query<With<RoomMarker, Entity>>,
+    mut connections: Query<(Entity, Mut<Connection>)>,
 ) {
+    let any_active = is_active.iter().iter().count() != 0;
+    if !any_active {
+        for (e, mut connection) in &mut connections.iter() {
+            if connection.open {
+                let mut body = connected.get_mut::<RigidBody>(e).unwrap();
+                body.rotation -= 90.0_f32.to_radians();
+                let rot = Mat2::from_angle(body.rotation);
+                let offset = rot * Vec2::new(0.5, 0.5);
+                body.position -= offset;
+                body.set_sensor(false);
+                connection.open = false;
+            }
+        }
+        for e in &mut rooms.iter() {
+            connected.get_mut::<RigidBody>(e).unwrap().set_active(false);
+            connected.get_mut::<Draw>(e).unwrap().is_visible = false;
+        }
+    }
     let current = current.entity;
     if let Ok(name) = query.get::<Name>(current) {
         let mut draw = connected.get_mut::<Draw>(current).unwrap();
         draw.is_visible = true;
         let mut body = connected.get_mut::<RigidBody>(current).unwrap();
-        body.position = Vec2::zero();
-        body.rotation = 0.0;
         body.set_active(true);
-        commands.insert_one(current, ActiveRoom);
-        eprintln!("* Entering {:?}", name.get());
+        if is_active.get::<ActiveRoom>(current).is_err() {
+            body.position = Vec2::zero();
+            body.rotation = 0.0;
+            commands.insert_one(current, ActiveRoom);
+            eprintln!("* Entering {:?}", name.get());
+        }
     }
 
     if let Ok(edges) = query.get::<Edges>(current) {
@@ -143,6 +195,7 @@ pub fn visible_parent_system(
     mut body_parents: Query<With<RigidBody, (Entity, &Parent)>>,
     drawables: Query<Mut<Draw>>,
     bodies: Query<Mut<RigidBody>>,
+    mut connections: Query<&Connection>,
 ) {
     for (e, parent) in &mut draw_parents.iter() {
         if let Ok(parent) = drawables.get::<Draw>(**parent) {
@@ -158,6 +211,11 @@ pub fn visible_parent_system(
             if let Ok(mut body) = bodies.get_mut::<RigidBody>(e) {
                 body.set_active(is_active);
             }
+        }
+    }
+    for conn in &mut connections.iter() {
+        if let Ok(mut body) = bodies.get_mut::<RigidBody>(conn.sensor) {
+            body.set_active(conn.open);
         }
     }
 }

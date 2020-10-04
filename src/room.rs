@@ -10,8 +10,11 @@ pub struct CurrentRoom {
 #[derive(Default, Debug)]
 pub struct ActiveRoom;
 
+pub struct RoomMarker;
+
 #[derive(Bundle)]
 pub struct RoomBundle {
+    pub marker: RoomMarker,
     pub name: Name,
     pub body: RigidBody,
 }

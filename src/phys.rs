@@ -42,11 +42,28 @@ pub enum Status {
 pub struct Joint {
     body1: Entity,
     body2: Entity,
+    offset: Vec2,
+    angle: f32,
 }
 
 impl Joint {
     pub fn new(body1: Entity, body2: Entity) -> Self {
-        Self { body1, body2 }
+        Self {
+            body1,
+            body2,
+            offset: Vec2::zero(),
+            angle: 0.0,
+        }
+    }
+
+    pub fn offset(mut self, offset: Vec2) -> Self {
+        self.offset = offset;
+        self
+    }
+
+    pub fn angle(mut self, angle: f32) -> Self {
+        self.angle = angle;
+        self
     }
 }
 
@@ -118,6 +135,12 @@ impl RigidBody {
             let rotation = Mat2::from_angle(self.rotation);
             min = self.position + rotation * min;
             max = self.position + rotation * max;
+            let min_x = min.x().min(max.x());
+            let min_y = min.y().min(max.y());
+            let max_x = min.x().max(max.x());
+            let max_y = min.y().max(max.y());
+            min = Vec2::new(min_x, min_y);
+            max = Vec2::new(max_x, max_y);
             Aabb { min, max }
         })
     }
@@ -225,11 +248,13 @@ pub fn physics_system(
         body.accumulator = Vec2::zero();
     }
 
+    let mut count = 0;
     for manifold in manifolds {
         let a = query.get::<RigidBody>(manifold.a).unwrap();
         let b = query.get::<RigidBody>(manifold.b).unwrap();
 
         if a.sensor || b.sensor {
+            count += 1;
             events.send(manifold);
             continue;
         }
@@ -302,7 +327,13 @@ pub fn physics_system(
 }
 
 pub fn joints_system(query: Query<Mut<RigidBody>>, mut joints: Query<&Joint>) {
-    for &Joint { body1, body2 } in &mut joints.iter() {
+    for &Joint {
+        body1,
+        body2,
+        offset,
+        angle,
+    } in &mut joints.iter()
+    {
         let (position, rotation) = {
             let body = query.get::<RigidBody>(body1).unwrap();
             let position = body.position;
@@ -310,8 +341,8 @@ pub fn joints_system(query: Query<Mut<RigidBody>>, mut joints: Query<&Joint>) {
             (position, rotation)
         };
         let mut body = query.get_mut::<RigidBody>(body2).unwrap();
-        body.position = position;
-        body.rotation = rotation;
+        body.position = position + offset;
+        body.rotation = rotation + angle;
     }
 }
 

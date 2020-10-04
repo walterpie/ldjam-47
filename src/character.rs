@@ -1,3 +1,5 @@
+use std::mem;
+
 use bevy::input::mouse::MouseMotion;
 use bevy::math::*;
 use bevy::prelude::*;
@@ -6,7 +8,8 @@ use bevy::render::{camera::*, prelude::*};
 use bevy_fly_camera::FlyCamera;
 
 use crate::phys::*;
-use crate::proc::Connection;
+use crate::proc::{Connection, RoomSensor};
+use crate::room::*;
 
 pub const MOUSE_SPEED: f32 = 0.03;
 pub const MAX_SPEED: f32 = 2.5;
@@ -139,18 +142,74 @@ pub fn character_controller_system(
 }
 
 pub fn sensor_system(
+    mut commands: Commands,
     input: Res<Input<KeyCode>>,
     events: Res<Events<Manifold>>,
     mut state: ResMut<SensorListenerState>,
+    mut current: ResMut<CurrentRoom>,
+    mut active: Query<With<ActiveRoom, Entity>>,
     mut sensor: Query<&Sensor>,
-    mut connection: Query<(Mut<Connection>, Mut<RigidBody>)>,
+    mut connection: Query<Mut<Connection>>,
+    mut bodies: Query<Mut<RigidBody>>,
+    mut room_sensors: Query<&RoomSensor>,
+    mut players: Query<(Entity, Mut<Character>)>,
 ) {
     for manifold in state.reader.iter(&events) {
+        if players.get::<Character>(manifold.a).is_ok() {
+            if let Ok(room) = room_sensors.get::<RoomSensor>(manifold.b) {
+                for e in &mut active.iter() {
+                    commands.remove_one::<ActiveRoom>(e);
+                }
+
+                let mut body = bodies.get_mut::<RigidBody>(manifold.b).unwrap();
+                body.set_active(false);
+                mem::drop(body);
+
+                current.entity = room.0;
+                let body = bodies.get::<RigidBody>(room.0).unwrap();
+                let position = body.position;
+                let rotation = body.rotation;
+                mem::drop(body);
+                for (e, mut controller) in &mut players.iter() {
+                    let mut body = bodies.get_mut::<RigidBody>(e).unwrap();
+                    body.position -= position;
+                    let rot = Mat2::from_angle(rotation);
+                    body.position = rot * body.position;
+                    body.velocity = rot * body.velocity;
+                    controller.yrot -= rotation;
+                }
+            }
+        } else if players.get::<Character>(manifold.b).is_ok() {
+            if let Ok(room) = room_sensors.get::<RoomSensor>(manifold.a) {
+                for e in &mut active.iter() {
+                    commands.remove_one::<ActiveRoom>(e);
+                }
+
+                let mut body = bodies.get_mut::<RigidBody>(manifold.a).unwrap();
+                body.set_active(false);
+                mem::drop(body);
+
+                current.entity = room.0;
+                let body = bodies.get::<RigidBody>(room.0).unwrap();
+                let position = body.position;
+                let rotation = body.rotation;
+                mem::drop(body);
+                for (e, mut controller) in &mut players.iter() {
+                    let mut body = bodies.get_mut::<RigidBody>(e).unwrap();
+                    body.position -= position;
+                    let rot = Mat2::from_angle(rotation);
+                    body.position = rot * body.position;
+                    body.velocity = rot * body.velocity;
+                    controller.yrot -= rotation;
+                }
+            }
+        }
         if sensor.get::<Sensor>(manifold.a).is_ok() {
             if let Ok(mut conn) = connection.get_mut::<Connection>(manifold.b) {
                 if input.just_pressed(KeyCode::Space) {
-                    let mut body = connection.get_mut::<RigidBody>(manifold.b).unwrap();
-                    if conn.open {
+                    let mut body = bodies.get_mut::<RigidBody>(manifold.b).unwrap();
+                    conn.open = !conn.open;
+                    if !conn.open {
                         body.rotation -= 90.0_f32.to_radians();
                         let rot = Mat2::from_angle(body.rotation);
                         let offset = rot * Vec2::new(0.5, 0.5);
@@ -163,14 +222,20 @@ pub fn sensor_system(
                         body.rotation += 90.0_f32.to_radians();
                         body.set_sensor(true);
                     }
-                    conn.open = !conn.open;
+
+                    mem::drop(body);
+                    bodies
+                        .get_mut::<RigidBody>(conn.sensor)
+                        .unwrap()
+                        .set_active(conn.open);
                 }
             }
         } else if sensor.get::<Sensor>(manifold.b).is_ok() {
             if let Ok(mut conn) = connection.get_mut::<Connection>(manifold.a) {
                 if input.just_pressed(KeyCode::Space) {
-                    let mut body = connection.get_mut::<RigidBody>(manifold.a).unwrap();
-                    if conn.open {
+                    let mut body = bodies.get_mut::<RigidBody>(manifold.a).unwrap();
+                    conn.open = !conn.open;
+                    if !conn.open {
                         body.rotation -= 90.0_f32.to_radians();
                         let rot = Mat2::from_angle(body.rotation);
                         let offset = rot * Vec2::new(0.5, 0.5);
@@ -183,7 +248,12 @@ pub fn sensor_system(
                         body.rotation += 90.0_f32.to_radians();
                         body.set_sensor(true);
                     }
-                    conn.open = !conn.open;
+
+                    mem::drop(body);
+                    bodies
+                        .get_mut::<RigidBody>(conn.sensor)
+                        .unwrap()
+                        .set_active(conn.open);
                 }
             }
         }
