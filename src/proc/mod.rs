@@ -114,6 +114,8 @@ pub struct PropPrototype {
 
 #[derive(Debug, Clone)]
 pub struct RoomPrototype {
+    pub name: String,
+    pub color: Color,
     pub width: f32,
     pub depth: f32,
     pub height: f32,
@@ -269,7 +271,7 @@ pub fn spawn(
                         ..Default::default()
                     },
                     mesh: handle,
-                    material: materials.add(Color::rgb(1.0, 1.0, 1.0).into()),
+                    material: materials.add(room.color.into()),
                     ..Default::default()
                 })
                 .with(body)
@@ -281,7 +283,7 @@ pub fn spawn(
         commands
             .spawn(RoomBundle {
                 marker: RoomMarker,
-                name: Name::new("Unnamed".to_string()),
+                name: Name::new(room.name.clone()),
                 body,
                 props: props.clone(),
             })
@@ -291,7 +293,7 @@ pub fn spawn(
                     ..Default::default()
                 },
                 mesh: handle,
-                material: materials.add(Color::rgb(1.0, 1.0, 1.0).into()),
+                material: materials.add(room.color.into()),
                 ..Default::default()
             })
             .for_current_entity(|e| {
@@ -437,7 +439,7 @@ pub fn spawn(
                         ..Default::default()
                     },
                     mesh: prop_door,
-                    material: materials.add(Color::rgb(1.0, 1.0, 1.0).into()),
+                    material: materials.add(room.color.into()),
                     ..Default::default()
                 })
                 .with_bundle(DoorBundle {
@@ -482,6 +484,8 @@ pub fn generate(params: &Parameters) -> LevelPrototype {
         let height =
             rand::random::<f32>() * (params.max_height - params.min_height) + params.min_height;
         let room = RoomPrototype {
+            name: "Unnamed".to_string(),
+            color: Color::rgb(1.0, 1.0, 1.0),
             width,
             height,
             depth,

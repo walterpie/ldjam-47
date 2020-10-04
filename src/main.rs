@@ -16,6 +16,7 @@ use room::*;
 
 pub mod array;
 pub mod character;
+pub mod level;
 pub mod phys;
 pub mod proc;
 pub mod room;
@@ -97,44 +98,22 @@ fn setup(
             ..Default::default()
         })
         .with(FlyCamera::default());
-    let params = Parameters {
-        size: 10,
-        min_size: 4.0,
-        max_size: 16.0,
-        min_height: 2.0,
-        max_height: 2.0,
-        min_props: 0,
-        max_props: 3,
-        props: ["bed", "chair", "desk", "flower_table"]
-            .iter()
-            .map(|n| n.to_string())
-            .collect(),
-        clone_probability: 1.0,
-    };
-    let level = proc::generate(&params);
-    // let level = LevelPrototype {
-    //     start: 0,
-    //     rooms: vec![
-    //         RoomPrototype {
-    //             width: 8.0,
-    //             height: 2.0,
-    //             depth: 8.0,
-    //             doors: vec![Door::South].into_iter().collect(),
-    //             edges: vec![EdgePrototype {
-    //                 index: 1,
-    //                 from: Door::South,
-    //                 to: Door::North,
-    //             }],
-    //         },
-    //         RoomPrototype {
-    //             width: 8.0,
-    //             height: 2.0,
-    //             depth: 8.0,
-    //             doors: vec![].into_iter().collect(),
-    //             edges: vec![],
-    //         },
-    //     ],
+    // let params = Parameters {
+    //     size: 10,
+    //     min_size: 4.0,
+    //     max_size: 16.0,
+    //     min_height: 2.0,
+    //     max_height: 2.0,
+    //     min_props: 0,
+    //     max_props: 3,
+    //     props: ["bed", "chair", "desk", "flower_table"]
+    //         .iter()
+    //         .map(|n| n.to_string())
+    //         .collect(),
+    //     clone_probability: 1.0,
     // };
+    // let level = proc::generate(&params);
+    let level = level::new();
     proc::spawn(&mut commands, &assets, &mut meshes, &mut materials, &level);
 }
 
