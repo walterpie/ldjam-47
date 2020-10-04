@@ -187,44 +187,52 @@ pub fn spawn(
         let mut body = RigidBody::new(Status::Static, INF_MASS, 0.5);
         body.set_active(false);
         if room.doors.contains(&Door::North) {
-            let o1 = Vec2::new(-room.width / 2.0, -room.depth / 2.0 - 0.1);
+            let o1 = Vec2::new(-room.width / 2.0 - 0.1, -room.depth / 2.0 - 0.1);
             let o2 = Vec2::new(0.5, -room.depth / 2.0 - 0.1);
-            body =
-                body.shape(o1, room.width / 2.0 - 0.5, 0.1)
-                    .shape(o2, room.width / 2.0 - 0.5, 0.1);
+            body = body.shape(o1, room.width / 2.0 - 0.5 + 0.1, 0.1).shape(
+                o2,
+                room.width / 2.0 - 0.5 + 0.1,
+                0.1,
+            );
         } else {
-            let offset = Vec2::new(-room.width / 2.0, -room.depth / 2.0 - 0.1);
-            body = body.shape(offset, room.width, 0.1);
+            let offset = Vec2::new(-room.width / 2.0 - 0.1, -room.depth / 2.0 - 0.1);
+            body = body.shape(offset, room.width + 0.2, 0.1);
         }
         if room.doors.contains(&Door::South) {
-            let o1 = Vec2::new(-room.width / 2.0, room.depth / 2.0);
+            let o1 = Vec2::new(-room.width / 2.0 - 0.1, room.depth / 2.0);
             let o2 = Vec2::new(0.5, room.depth / 2.0);
-            body =
-                body.shape(o1, room.width / 2.0 - 0.5, 0.1)
-                    .shape(o2, room.width / 2.0 - 0.5, 0.1);
+            body = body.shape(o1, room.width / 2.0 - 0.5 + 0.1, 0.1).shape(
+                o2,
+                room.width / 2.0 - 0.5 + 0.1,
+                0.1,
+            );
         } else {
-            let offset = Vec2::new(-room.width / 2.0, room.depth / 2.0);
-            body = body.shape(offset, room.width, 0.1);
+            let offset = Vec2::new(-room.width / 2.0 - 0.1, room.depth / 2.0);
+            body = body.shape(offset, room.width + 0.2, 0.1);
         }
         if room.doors.contains(&Door::East) {
-            let o1 = Vec2::new(-room.width / 2.0 - 0.1, -room.depth / 2.0);
+            let o1 = Vec2::new(-room.width / 2.0 - 0.1, -room.depth / 2.0 - 0.1);
             let o2 = Vec2::new(-room.width / 2.0 - 0.1, 0.5);
-            body =
-                body.shape(o1, 0.1, room.depth / 2.0 - 0.5)
-                    .shape(o2, 0.1, room.depth / 2.0 - 0.5);
+            body = body.shape(o1, 0.1, room.depth / 2.0 - 0.5 + 0.1).shape(
+                o2,
+                0.1,
+                room.depth / 2.0 - 0.5 + 0.1,
+            );
         } else {
             let offset = Vec2::new(-room.width / 2.0 - 0.1, -room.depth / 2.0);
             body = body.shape(offset, 0.1, room.depth);
         }
         if room.doors.contains(&Door::West) {
-            let o1 = Vec2::new(room.width / 2.0, -room.depth / 2.0);
+            let o1 = Vec2::new(room.width / 2.0, -room.depth / 2.0 - 0.1);
             let o2 = Vec2::new(room.width / 2.0, 0.5);
-            body =
-                body.shape(o1, 0.1, room.depth / 2.0 - 0.5)
-                    .shape(o2, 0.1, room.depth / 2.0 - 0.5);
+            body = body.shape(o1, 0.1, room.depth / 2.0 - 0.5 + 0.1).shape(
+                o2,
+                0.1,
+                room.depth / 2.0 - 0.5 + 0.1,
+            );
         } else {
-            let offset = Vec2::new(room.width / 2.0, -room.depth / 2.0);
-            body = body.shape(offset, 0.1, room.depth);
+            let offset = Vec2::new(room.width / 2.0, -room.depth / 2.0 - 0.1);
+            body = body.shape(offset, 0.1, room.depth + 0.2);
         }
 
         let mut props = Vec::new();
@@ -259,7 +267,7 @@ pub fn spawn(
             let width = max.x() - min.x();
             let height = max.y() - min.y();
             let offset = min;
-            let mut body = RigidBody::new(Status::Dynamic, 1.0, 0.5)
+            let mut body = RigidBody::new(Status::Static, 1.0, 0.5)
                 .shape(offset, width, height)
                 .position(prop.position)
                 .rotation(prop.rotation);

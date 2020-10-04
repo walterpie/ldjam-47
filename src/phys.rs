@@ -3,6 +3,7 @@ use std::mem;
 use bevy::math::*;
 use bevy::prelude::*;
 use bevy::render::{mesh::*, pipeline::PrimitiveTopology, prelude::*};
+use hashbrown::HashSet;
 use itertools::Itertools;
 
 use crate::array::Array;
@@ -154,6 +155,8 @@ pub struct Manifold {
     pub p_y: f32,
     pub n_x: f32,
     pub n_y: f32,
+    pub a_c: [bool; 2],
+    pub b_c: [bool; 2],
 }
 
 pub fn collide(
@@ -177,11 +180,17 @@ pub fn collide(
             let x_overlap = a_extent + b_extent - d.x().abs();
 
             if x_overlap > 0.0 {
+                let a_x_contained = a.min.x() > b.min.x() && a.max.x() < b.max.x();
+                let b_x_contained = b.min.x() > a.min.x() && b.max.x() < a.max.x();
+
                 let a_extent = (a.max.y() - a.min.y()) / 2.0;
                 let b_extent = (b.max.y() - b.min.y()) / 2.0;
                 let y_overlap = a_extent + b_extent - d.y().abs();
 
                 if y_overlap > 0.0 {
+                    let a_y_contained = a.min.y() > b.min.y() && a.max.y() < b.max.y();
+                    let b_y_contained = b.min.y() > a.min.y() && b.max.y() < a.max.y();
+
                     let n_x = if d.x() < 0.0 { -1.0 } else { 1.0 };
                     let n_y = if d.y() < 0.0 { -1.0 } else { 1.0 };
                     return Some(Manifold {
@@ -191,6 +200,8 @@ pub fn collide(
                         p_y: y_overlap,
                         n_x,
                         n_y,
+                        a_c: [a_x_contained, a_y_contained],
+                        b_c: [b_x_contained, b_y_contained],
                     });
                 }
             }
@@ -207,11 +218,24 @@ pub fn physics_system(
     mut query: Query<(Entity, Mut<RigidBody>, Mut<Transform>)>,
 ) {
     let mut manifolds = Vec::new();
-    let bodies = query
+    let mut bodies = query
         .iter()
         .iter()
         .map(|(e, b, _)| (e, *b))
         .collect::<Vec<_>>();
+
+    let delta_time = time.delta.as_secs_f32();
+
+    for &mut (e, ref mut body) in &mut bodies {
+        if !body.active {
+            continue;
+        }
+        let position = body.position + body.velocity * delta_time;
+        let mut b = query.get_mut::<RigidBody>(e).unwrap();
+        b.position = position;
+        body.position = position;
+    }
+
     for (i, (a, body1)) in bodies.iter().enumerate() {
         if !body1.active {
             continue;
@@ -226,27 +250,8 @@ pub fn physics_system(
         }
     }
 
-    let delta_time = time.delta.as_secs_f32();
-
-    for &(e, ref body) in &bodies {
-        if !body.active {
-            continue;
-        }
-        let position = body.position + body.velocity * delta_time;
-        let mut body = query.get_mut::<RigidBody>(e).unwrap();
-        body.position = position;
-    }
-
-    for &(e, ref body) in &bodies {
-        if !body.active {
-            continue;
-        }
-        let velocity = body.velocity + body.accumulator * delta_time;
-        let mut body = query.get_mut::<RigidBody>(e).unwrap();
-        body.velocity = velocity;
-        body.velocity *= friction.0;
-        body.accumulator = Vec2::zero();
-    }
+    let mut skx = HashSet::new();
+    let mut sky = HashSet::new();
 
     let mut count = 0;
     for manifold in manifolds {
@@ -276,14 +281,64 @@ pub fn physics_system(
             mem::drop(b);
 
             let mut a = query.get_mut::<RigidBody>(manifold.a).unwrap();
-            let inv_mass = a.inv_mass;
-            *a.velocity.x_mut() -= impulse * inv_mass;
-            *a.position.x_mut() -= inv_mass * correction;
+            match a.status {
+                Status::Static => {}
+                Status::Dynamic => {
+                    let inv_mass = a.inv_mass;
+                    *a.velocity.x_mut() -= impulse * inv_mass;
+                    *a.position.x_mut() -= inv_mass * correction;
+                }
+                Status::Semikinematic => {
+                    if !skx.contains(&manifold.a) {
+                        skx.insert(manifold.a);
+                        if !manifold.a_c[0] {
+                            let d = -manifold.n_x * manifold.p_x;
+                            let v = a.velocity.x() * delta_time;
+                            if v.signum() != d.signum() && d.abs() < v.abs() {
+                                *a.position.x_mut() += d;
+                            } else {
+                                *a.position.x_mut() -= v;
+                            }
+                        }
+                    }
+                }
+            }
+            for &mut (e, ref mut body) in &mut bodies {
+                if e == manifold.a {
+                    body.position = a.position;
+                    body.velocity = a.velocity;
+                }
+            }
             mem::drop(a);
             let mut b = query.get_mut::<RigidBody>(manifold.b).unwrap();
-            let inv_mass = b.inv_mass;
-            *b.velocity.x_mut() += impulse * inv_mass;
-            *b.position.x_mut() += inv_mass * correction;
+            match b.status {
+                Status::Static => {}
+                Status::Dynamic => {
+                    let inv_mass = b.inv_mass;
+                    *b.velocity.x_mut() -= impulse * inv_mass;
+                    *b.position.x_mut() -= inv_mass * correction;
+                }
+                Status::Semikinematic => {
+                    if !skx.contains(&manifold.b) {
+                        skx.insert(manifold.b);
+                        if !manifold.b_c[0] {
+                            let d = manifold.n_x * manifold.p_x;
+                            let v = b.velocity.x() * delta_time;
+                            if v.signum() != d.signum() && d.abs() < v.abs() {
+                                *b.position.x_mut() += d;
+                            } else {
+                                *b.position.x_mut() -= v;
+                            }
+                        }
+                    }
+                }
+            }
+            for &mut (e, ref mut body) in &mut bodies {
+                if e == manifold.b {
+                    body.position = b.position;
+                    body.velocity = b.velocity;
+                }
+            }
             mem::drop(b);
         }
 
@@ -307,16 +362,77 @@ pub fn physics_system(
             mem::drop(b);
 
             let mut a = query.get_mut::<RigidBody>(manifold.a).unwrap();
-            let inv_mass = a.inv_mass;
-            *a.velocity.y_mut() -= impulse * inv_mass;
-            *a.position.y_mut() -= inv_mass * correction;
+            match a.status {
+                Status::Static => {}
+                Status::Dynamic => {
+                    let inv_mass = a.inv_mass;
+                    *a.velocity.y_mut() -= impulse * inv_mass;
+                    *a.position.y_mut() -= inv_mass * correction;
+                }
+                Status::Semikinematic => {
+                    if !sky.contains(&manifold.a) {
+                        if !manifold.a_c[1] {
+                            sky.insert(manifold.a);
+                            let d = -manifold.n_y * manifold.p_y;
+                            let v = a.velocity.y() * delta_time;
+                            if v.signum() != d.signum() && d.abs() < v.abs() {
+                                *a.position.y_mut() += d;
+                            } else {
+                                *a.position.y_mut() -= v;
+                            }
+                        }
+                    }
+                }
+            }
+            for &mut (e, ref mut body) in &mut bodies {
+                if e == manifold.a {
+                    body.position = a.position;
+                    body.velocity = a.velocity;
+                }
+            }
             mem::drop(a);
             let mut b = query.get_mut::<RigidBody>(manifold.b).unwrap();
-            let inv_mass = b.inv_mass;
-            *b.velocity.y_mut() += impulse * inv_mass;
-            *b.position.y_mut() += inv_mass * correction;
+            match b.status {
+                Status::Static => {}
+                Status::Dynamic => {
+                    let inv_mass = b.inv_mass;
+                    *b.velocity.y_mut() -= impulse * inv_mass;
+                    *b.position.y_mut() -= inv_mass * correction;
+                }
+                Status::Semikinematic => {
+                    if !sky.contains(&manifold.b) {
+                        if !manifold.b_c[1] {
+                            sky.insert(manifold.b);
+                            let d = manifold.n_y * manifold.p_y;
+                            let v = b.velocity.y() * delta_time;
+                            if v.signum() != d.signum() && d.abs() < v.abs() {
+                                *b.position.y_mut() += d;
+                            } else {
+                                *b.position.y_mut() -= v;
+                            }
+                        }
+                    }
+                }
+            }
+            for &mut (e, ref mut body) in &mut bodies {
+                if e == manifold.b {
+                    body.position = b.position;
+                    body.velocity = b.velocity;
+                }
+            }
             mem::drop(b);
         }
+    }
+
+    for &(e, ref body) in &bodies {
+        if !body.active {
+            continue;
+        }
+        let velocity = body.velocity + body.accumulator * delta_time;
+        let mut body = query.get_mut::<RigidBody>(e).unwrap();
+        body.velocity = velocity;
+        body.velocity *= friction.0;
+        body.accumulator = Vec2::zero();
     }
 
     for &(e, ref b) in &bodies {
