@@ -48,6 +48,7 @@ pub struct RigidBody {
     pub inv_mass: f32,
     pub restitution: f32,
     pub active: bool,
+    pub sensor: bool,
 }
 
 impl RigidBody {
@@ -62,11 +63,16 @@ impl RigidBody {
             inv_mass: if mass == INF_MASS { 0.0 } else { mass.recip() },
             restitution,
             active: true,
+            sensor: false,
         }
     }
 
     pub fn set_active(&mut self, active: bool) {
         self.active = active;
+    }
+
+    pub fn set_sensor(&mut self, sensor: bool) {
+        self.sensor = sensor;
     }
 
     pub fn position(mut self, position: Vec2) -> Self {
@@ -153,6 +159,7 @@ pub fn physics_system(
     mut commands: Commands,
     time: Res<Time>,
     friction: Res<Friction>,
+    mut events: ResMut<Events<Manifold>>,
     mut query: Query<(Entity, Mut<RigidBody>, Mut<Transform>)>,
 ) {
     let mut manifolds = Vec::new();
@@ -188,6 +195,11 @@ pub fn physics_system(
     for manifold in manifolds {
         let a = query.get::<RigidBody>(manifold.a).unwrap();
         let b = query.get::<RigidBody>(manifold.b).unwrap();
+
+        if a.sensor || b.sensor {
+            events.send(manifold);
+            continue;
+        }
 
         {
             let rv = b.velocity.x() - a.velocity.x();

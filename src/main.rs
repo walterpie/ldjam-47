@@ -22,6 +22,7 @@ fn main() {
         .add_default_plugins()
         .add_plugin(FlyCameraPlugin)
         .init_resource::<Friction>()
+        .add_event::<Manifold>()
         .add_startup_system(setup.system())
         .add_system(room_system.system())
         .add_system(visible_parent_system.system())

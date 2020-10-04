@@ -226,6 +226,11 @@ pub fn spawn(
                 Door::West => -90.0_f32.to_radians(),
             };
             let mesh = meshes.get(&phys_door).unwrap();
+            let mut body = RigidBody::new(Status::Static, INF_MASS, 0.5)
+                .shape(Vec2::zero(), 0.5, 0.1)
+                .position(Vec2::new(translation.x(), translation.z()))
+                .rotation(rotation);
+            body.set_sensor(true);
             commands
                 .spawn(PbrComponents {
                     draw: Draw {
@@ -237,11 +242,7 @@ pub fn spawn(
                     ..Default::default()
                 })
                 .with(Parent(current))
-                .with(
-                    RigidBody::new(Status::Static, INF_MASS, 0.5)
-                        .position(Vec2::new(translation.x(), translation.z()))
-                        .rotation(rotation),
-                );
+                .with(body);
         }
     }
 
