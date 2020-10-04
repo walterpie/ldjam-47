@@ -28,6 +28,7 @@ fn main() {
         .add_system(visible_parent_system.system())
         .add_system(character_controller_system.system())
         .add_system(physics_system.system())
+        .add_system(joints_system.system())
         .add_system(debug_draw_system.system())
         .run();
 }
@@ -42,12 +43,18 @@ fn setup(
         .load_sync(&mut meshes, "assets/mesh/char_player.gltf")
         .unwrap();
     let mut character = None;
+    let mut sensor = None;
+    let mut sensor_body =
+        RigidBody::new(Status::Semikinematic, 1.0, 0.5).shape(Vec2::new(-0.5, -0.5), 1.0, 1.0);
+    sensor_body.set_sensor(true);
     commands
         .spawn(CharBundle {
             controller: Character::default(),
-            body: RigidBody::new(Status::Semikinematic, 1.0, 0.5)
-                .position(Vec2::new(0.0, 0.0))
-                .shape(Vec2::zero(), 0.5, 0.5),
+            body: RigidBody::new(Status::Semikinematic, 1.0, 0.5).shape(
+                Vec2::new(-0.25, -0.25),
+                0.5,
+                0.5,
+            ),
         })
         .with_bundle(PbrComponents {
             mesh: char_player,
@@ -55,6 +62,14 @@ fn setup(
             ..Default::default()
         })
         .for_current_entity(|e| character = Some(e))
+        .spawn(SensorBundle {
+            global_transform: Default::default(),
+            transform: Default::default(),
+            controller: Sensor::default(),
+            body: sensor_body,
+        })
+        .for_current_entity(|e| sensor = Some(e))
+        .spawn((Joint::new(character.unwrap(), sensor.unwrap()),))
         .spawn(LightComponents {
             transform: Transform::from_translation(Vec3::new(4.0, 5.0, 4.0)),
             ..Default::default()
@@ -89,10 +104,10 @@ pub fn room_system(
     if let Ok(name) = query.get::<Name>(current) {
         let mut draw = connected.get_mut::<Draw>(current).unwrap();
         draw.is_visible = true;
-        connected
-            .get_mut::<RigidBody>(current)
-            .unwrap()
-            .set_active(true);
+        let mut body = connected.get_mut::<RigidBody>(current).unwrap();
+        body.position = Vec2::zero();
+        body.rotation = 0.0;
+        body.set_active(true);
         commands.insert_one(current, ActiveRoom);
         eprintln!("* Entering {:?}", name.get());
     }
@@ -103,7 +118,7 @@ pub fn room_system(
             // NOTE: assumes quat is (0, 1, 0, theta)
             let rotation = edge.isometry().1.to_axis_angle().1;
             let mut body = connected.get_mut::<RigidBody>(edge.entity()).unwrap();
-            body.set_active(true);
+            body.set_active(false);
             body.position = position;
             body.rotation = rotation;
             let mut draw = connected.get_mut::<Draw>(edge.entity()).unwrap();
@@ -113,14 +128,25 @@ pub fn room_system(
 }
 
 pub fn visible_parent_system(
-    mut parents: Query<With<Draw, (Entity, &Parent)>>,
+    mut draw_parents: Query<With<Draw, (Entity, &Parent)>>,
+    mut body_parents: Query<With<RigidBody, (Entity, &Parent)>>,
     drawables: Query<Mut<Draw>>,
+    bodies: Query<Mut<RigidBody>>,
 ) {
-    for (e, parent) in &mut parents.iter() {
+    for (e, parent) in &mut draw_parents.iter() {
         if let Ok(parent) = drawables.get::<Draw>(**parent) {
             let is_visible = parent.is_visible;
             mem::drop(parent);
             drawables.get_mut::<Draw>(e).unwrap().is_visible = is_visible;
+        }
+    }
+    for (e, parent) in &mut body_parents.iter() {
+        if let Ok(parent) = bodies.get::<RigidBody>(**parent) {
+            let is_active = parent.is_active();
+            mem::drop(parent);
+            if let Ok(mut body) = bodies.get_mut::<RigidBody>(e) {
+                body.set_active(is_active);
+            }
         }
     }
 }

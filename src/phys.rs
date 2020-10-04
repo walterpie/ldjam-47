@@ -39,6 +39,18 @@ pub enum Status {
 }
 
 #[derive(Debug, Clone, Copy)]
+pub struct Joint {
+    body1: Entity,
+    body2: Entity,
+}
+
+impl Joint {
+    pub fn new(body1: Entity, body2: Entity) -> Self {
+        Self { body1, body2 }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
 pub struct RigidBody {
     pub position: Vec2,
     pub rotation: f32,
@@ -66,6 +78,10 @@ impl RigidBody {
             active: true,
             sensor: false,
         }
+    }
+
+    pub fn is_active(&self) -> bool {
+        self.active
     }
 
     pub fn set_active(&mut self, active: bool) {
@@ -97,11 +113,11 @@ impl RigidBody {
 
     pub fn aabbs(self) -> impl Iterator<Item = Aabb> + Clone {
         self.shape.into_iter().map(move |shape| {
-            let mut min = self.position + shape.offset;
-            let mut max = self.position + shape.offset + Vec2::new(shape.width, shape.height);
+            let mut min = shape.offset;
+            let mut max = shape.offset + Vec2::new(shape.width, shape.height);
             let rotation = Mat2::from_angle(self.rotation);
-            min = rotation * min;
-            max = rotation * max;
+            min = self.position + rotation * min;
+            max = self.position + rotation * max;
             Aabb { min, max }
         })
     }
@@ -171,10 +187,16 @@ pub fn physics_system(
     let bodies = query
         .iter()
         .iter()
-        .filter_map(|(e, b, _)| if b.active { Some((e, *b)) } else { None })
+        .map(|(e, b, _)| (e, *b))
         .collect::<Vec<_>>();
     for (i, (a, body1)) in bodies.iter().enumerate() {
+        if !body1.active {
+            continue;
+        }
         for (b, body2) in &bodies[i + 1..] {
+            if !body2.active {
+                continue;
+            }
             if body1.status != Status::Static || body2.status != Status::Static {
                 manifolds.extend(collide(*a, *b, *body1, *body2));
             }
@@ -184,12 +206,18 @@ pub fn physics_system(
     let delta_time = time.delta.as_secs_f32();
 
     for &(e, ref body) in &bodies {
+        if !body.active {
+            continue;
+        }
         let position = body.position + body.velocity * delta_time;
         let mut body = query.get_mut::<RigidBody>(e).unwrap();
         body.position = position;
     }
 
     for &(e, ref body) in &bodies {
+        if !body.active {
+            continue;
+        }
         let velocity = body.velocity + body.accumulator * delta_time;
         let mut body = query.get_mut::<RigidBody>(e).unwrap();
         body.velocity = velocity;
@@ -273,6 +301,20 @@ pub fn physics_system(
     }
 }
 
+pub fn joints_system(query: Query<Mut<RigidBody>>, mut joints: Query<&Joint>) {
+    for &Joint { body1, body2 } in &mut joints.iter() {
+        let (position, rotation) = {
+            let body = query.get::<RigidBody>(body1).unwrap();
+            let position = body.position;
+            let rotation = body.rotation;
+            (position, rotation)
+        };
+        let mut body = query.get_mut::<RigidBody>(body2).unwrap();
+        body.position = position;
+        body.rotation = rotation;
+    }
+}
+
 pub struct DebugDraw;
 
 pub fn debug_draw_system(
@@ -282,13 +324,16 @@ pub fn debug_draw_system(
     mut query: Query<Without<DebugDraw, (Entity, &RigidBody)>>,
 ) {
     for (e, body) in &mut query.iter() {
+        if !body.active {
+            continue;
+        }
         let mut positions = Vec::new();
         let mut normals = Vec::new();
         let mut uvs = Vec::new();
         let mut indices = Vec::new();
-        for aabb in body.aabbs() {
-            let min = aabb.min - body.position;
-            let max = aabb.max - body.position;
+        for shape in body.shape.iter() {
+            let min = shape.offset;
+            let max = shape.offset + Vec2::new(shape.width, shape.height);
             let v0 = Vec3::new(min.x(), 4.0, min.y());
             let v1 = Vec3::new(min.x(), 4.0, max.y());
             let v2 = Vec3::new(max.x(), 4.0, max.y());
@@ -321,10 +366,15 @@ pub fn debug_draw_system(
             indices: Some(indices),
         };
         let handle = meshes.add(mesh);
+        let color = if body.sensor {
+            Color::rgb(0.0, 0.0, 1.0)
+        } else {
+            Color::rgb(1.0, 0.0, 0.0)
+        };
         commands
             .spawn(PbrComponents {
                 mesh: handle,
-                material: materials.add(Color::rgb(1.0, 0.0, 0.0).into()),
+                material: materials.add(color.into()),
                 ..Default::default()
             })
             .with(Parent(e))

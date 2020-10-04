@@ -9,9 +9,20 @@ pub const INC_SPEED: f32 = 5.0;
 #[derive(Default, Debug)]
 pub struct Character;
 
+#[derive(Default, Debug)]
+pub struct Sensor;
+
 #[derive(Bundle)]
 pub struct CharBundle {
     pub controller: Character,
+    pub body: RigidBody,
+}
+
+#[derive(Bundle)]
+pub struct SensorBundle {
+    pub global_transform: GlobalTransform,
+    pub transform: Transform,
+    pub controller: Sensor,
     pub body: RigidBody,
 }
 

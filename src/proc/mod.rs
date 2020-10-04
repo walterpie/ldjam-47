@@ -208,28 +208,23 @@ pub fn spawn(
             });
         let current = current.unwrap();
         for &door in &room.doors {
-            let translation = match door {
-                Door::North | Door::South => Vec3::new(0.0, 0.0, -room.depth / 2.0),
-                Door::East | Door::West => Vec3::new(0.0, 0.0, -room.width / 2.0),
+            let position = match door {
+                Door::North => Vec2::new(0.0, -room.depth / 2.0),
+                Door::South => Vec2::new(0.0, room.depth / 2.0),
+                Door::East => Vec2::new(-room.width / 2.0, 0.0),
+                Door::West => Vec2::new(room.width / 2.0, 0.0),
             };
-            let rotation = match door {
-                Door::North => Quat::from_rotation_y(0.0),
-                Door::South => Quat::from_rotation_y(180.0_f32.to_radians()),
-                Door::East => Quat::from_rotation_y(90.0_f32.to_radians()),
-                Door::West => Quat::from_rotation_y(-90.0_f32.to_radians()),
-            };
-            let translation = rotation * translation;
+            let (width, height) = (1.0, 0.1);
             let rotation = match door {
                 Door::North => 0.0,
                 Door::South => 180.0_f32.to_radians(),
-                Door::East => 90.0_f32.to_radians(),
-                Door::West => -90.0_f32.to_radians(),
+                Door::East => -90.0_f32.to_radians(),
+                Door::West => 90.0_f32.to_radians(),
             };
-            let mesh = meshes.get(&phys_door).unwrap();
             let mut body = RigidBody::new(Status::Static, INF_MASS, 0.5)
-                .shape(Vec2::zero(), 0.5, 0.1)
-                .position(Vec2::new(translation.x(), translation.z()))
-                .rotation(rotation);
+                .position(position)
+                .rotation(rotation)
+                .shape(Vec2::new(-0.5, 0.0), width, height);
             body.set_sensor(true);
             commands
                 .spawn(PbrComponents {
