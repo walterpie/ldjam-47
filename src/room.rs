@@ -68,7 +68,7 @@ impl Edges {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Props {
     pub vec: Vec<Entity>,
 }

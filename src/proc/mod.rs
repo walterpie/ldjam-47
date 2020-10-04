@@ -1,6 +1,8 @@
+use std::f32::consts::PI;
 use std::ops::Not;
 
 use bevy::prelude::*;
+use bevy::render::mesh::*;
 use hashbrown::{HashMap, HashSet};
 use rand::distributions::{Distribution, Standard};
 use rand::Rng;
@@ -104,13 +106,20 @@ impl Not for Door {
 }
 
 #[derive(Debug, Clone)]
+pub struct PropPrototype {
+    pub name: String,
+    pub position: Vec2,
+    pub rotation: f32,
+}
+
+#[derive(Debug, Clone)]
 pub struct RoomPrototype {
     pub width: f32,
     pub depth: f32,
     pub height: f32,
     pub doors: HashSet<Door>,
     pub edges: Vec<EdgePrototype>,
-    pub props: Vec<String>,
+    pub props: Vec<PropPrototype>,
 }
 
 #[derive(Debug, Clone)]
@@ -216,11 +225,65 @@ pub fn spawn(
             body = body.shape(offset, 0.1, room.depth);
         }
 
+        let mut props = Vec::new();
+        for prop in &room.props {
+            let handle = assets
+                .load_sync(meshes, format!("assets/mesh/prop_{}.gltf", prop.name))
+                .unwrap();
+            let mesh = meshes.get(&handle).unwrap();
+            let mut min = Vec2::zero();
+            let mut max = Vec2::zero();
+            for attr in &mesh.attributes {
+                if attr.name == VertexAttribute::POSITION {
+                    match &attr.values {
+                        VertexAttributeValues::Float3(values) => {
+                            for positions in values {
+                                let x = min.x().min(positions[0]);
+                                *min.x_mut() = x;
+                                let y = min.y().min(positions[2]);
+                                *min.y_mut() = y;
+
+                                let x = max.x().max(positions[0]);
+                                *max.x_mut() = x;
+                                let y = max.y().max(positions[2]);
+                                *max.y_mut() = y;
+                            }
+                        }
+                        _ => unimplemented!(),
+                    }
+                    break;
+                }
+            }
+            let width = max.x() - min.x();
+            let height = max.y() - min.y();
+            let offset = min;
+            let mut body = RigidBody::new(Status::Dynamic, 1.0, 0.5)
+                .shape(offset, width, height)
+                .position(prop.position)
+                .rotation(prop.rotation);
+            body.set_active(false);
+            commands
+                .spawn(PbrComponents {
+                    draw: Draw {
+                        is_visible: false,
+                        ..Default::default()
+                    },
+                    mesh: handle,
+                    material: materials.add(Color::rgb(1.0, 1.0, 1.0).into()),
+                    ..Default::default()
+                })
+                .with(body)
+                .for_current_entity(|e| props.push(e));
+        }
+
+        let props = Props { vec: props };
+
         commands
             .spawn(RoomBundle {
                 marker: RoomMarker,
                 name: Name::new("Unnamed".to_string()),
                 body,
+                props: props.clone(),
             })
             .with_bundle(PbrComponents {
                 draw: Draw {
@@ -237,6 +300,10 @@ pub fn spawn(
             });
 
         let current = current.unwrap();
+
+        for &e in &props.vec {
+            commands.insert_one(e, Parent(current));
+        }
 
         let w = room.width - 1.5;
         let h = room.depth - 1.5;
@@ -398,6 +465,9 @@ pub struct Parameters {
     pub min_height: f32,
     pub max_height: f32,
     pub clone_probability: f32,
+    pub min_props: usize,
+    pub max_props: usize,
+    pub props: Vec<String>,
 }
 
 pub fn generate(params: &Parameters) -> LevelPrototype {
@@ -417,6 +487,7 @@ pub fn generate(params: &Parameters) -> LevelPrototype {
             depth,
             doors: HashSet::new(),
             edges: Vec::new(),
+            props: Vec::new(),
         };
         if rand::random::<f32>() < params.clone_probability {
             rooms.push(room.clone());
@@ -451,6 +522,20 @@ pub fn generate(params: &Parameters) -> LevelPrototype {
             edges.push(EdgePrototype { index, from, to });
         }
         room.edges = edges;
+
+        let n = rand::random::<usize>() % (params.max_props - params.min_props) + params.min_props;
+        for _ in 0..n {
+            let x = rand::random::<f32>() * room.width - room.width / 2.0;
+            let y = rand::random::<f32>() * room.depth - room.depth / 2.0;
+            let r = rand::random::<f32>() * PI;
+            let prop = rand::random::<usize>() % params.props.len();
+            let name = params.props[prop].clone();
+            room.props.push(PropPrototype {
+                name,
+                position: Vec2::new(x, y),
+                rotation: r,
+            });
+        }
     }
 
     LevelPrototype { start, rooms }

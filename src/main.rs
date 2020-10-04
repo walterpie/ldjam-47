@@ -103,6 +103,12 @@ fn setup(
         max_size: 16.0,
         min_height: 2.0,
         max_height: 2.0,
+        min_props: 0,
+        max_props: 3,
+        props: ["bed", "chair", "desk", "flower_table"]
+            .iter()
+            .map(|n| n.to_string())
+            .collect(),
         clone_probability: 1.0,
     };
     let level = proc::generate(&params);
@@ -135,7 +141,7 @@ fn setup(
 pub fn room_system(
     mut commands: Commands,
     current: Res<CurrentRoom>,
-    mut query: Query<(Entity, &Edges, &Name)>,
+    mut query: Query<(Entity, &Edges, &Name, &Props)>,
     mut is_active: Query<&ActiveRoom>,
     connected: Query<(Mut<RigidBody>, Mut<Draw>)>,
     mut rooms: Query<With<RoomMarker, Entity>>,
@@ -190,6 +196,13 @@ pub fn room_system(
 
     if let Ok(doorset) = query.get::<DoorSet>(current) {
         for &e in &doorset.vec {
+            let mut body = connected.get_mut::<RigidBody>(e).unwrap();
+            body.set_active(true);
+        }
+    }
+
+    if let Ok(props) = query.get::<Props>(current) {
+        for &e in &props.vec {
             let mut body = connected.get_mut::<RigidBody>(e).unwrap();
             body.set_active(true);
         }
