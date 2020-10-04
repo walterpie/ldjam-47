@@ -4,6 +4,8 @@
 use std::mem;
 
 use bevy::prelude::*;
+use bevy::render::camera::*;
+use bevy::render::render_graph::base::camera::CAMERA3D;
 use bevy_fly_camera::{FlyCamera, FlyCameraPlugin};
 
 use character::*;
@@ -47,21 +49,18 @@ fn setup(
     let mut character = None;
     let mut sensor = None;
     let mut sensor_body =
-        RigidBody::new(Status::Semikinematic, 1.0, 0.5).shape(Vec2::new(-0.5, -0.5), 1.0, 1.0);
+        RigidBody::new(Status::Semikinematic, 1.0, 0.5).shape(Vec2::new(-2.0, -2.0), 4.0, 4.0);
     sensor_body.set_sensor(true);
     commands
         .spawn(CharBundle {
+            global_transform: Default::default(),
+            transform: Default::default(),
             controller: Character::default(),
             body: RigidBody::new(Status::Semikinematic, 1.0, 0.5).shape(
                 Vec2::new(-0.25, -0.25),
                 0.5,
                 0.5,
             ),
-        })
-        .with_bundle(PbrComponents {
-            mesh: char_player,
-            material: materials.add(Color::rgb(1.0, 1.0, 1.0).into()),
-            ..Default::default()
         })
         .for_current_entity(|e| character = Some(e))
         .spawn(SensorBundle {
@@ -77,13 +76,23 @@ fn setup(
             ..Default::default()
         })
         .spawn(Camera3dComponents {
-            transform: Transform::from_translation_rotation(
-                Vec3::new(0.0, 8.0, 7.0),
-                Quat::from_rotation_x(-30.0_f32.to_radians()),
-            ),
+            transform: Transform::from_translation(Vec3::new(0.0, 1.6, 0.0)),
+            camera: Camera {
+                name: Some(CAMERA3D.to_string()),
+                ..Default::default()
+            },
             ..Default::default()
         })
-        .with(Parent(character.unwrap()));
+        .with(FirstPersonCamera)
+        .with(Parent(character.unwrap()))
+        .spawn(Camera3dComponents {
+            camera: Camera {
+                name: Some("None".to_string()),
+                ..Default::default()
+            },
+            ..Default::default()
+        })
+        .with(FlyCamera::default());
     let params = Parameters {
         size: 10,
         min_size: 4.0,

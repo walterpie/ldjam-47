@@ -1,20 +1,45 @@
+use bevy::input::mouse::MouseMotion;
 use bevy::math::*;
 use bevy::prelude::*;
+use bevy::render::render_graph::base::camera::CAMERA3D;
+use bevy::render::{camera::*, prelude::*};
+use bevy_fly_camera::FlyCamera;
 
 use crate::phys::*;
 use crate::proc::Connection;
 
+pub const MOUSE_SPEED: f32 = 0.03;
 pub const MAX_SPEED: f32 = 2.5;
 pub const INC_SPEED: f32 = 5.0;
 
-#[derive(Default, Debug)]
-pub struct Character;
+#[derive(Default)]
+pub struct FirstPersonCamera;
+
+pub struct Character {
+    active: bool,
+    yrot: f32,
+    xrot: f32,
+    reader: EventReader<MouseMotion>,
+}
+
+impl Default for Character {
+    fn default() -> Self {
+        Self {
+            active: true,
+            yrot: 0.0,
+            xrot: 0.0,
+            reader: Default::default(),
+        }
+    }
+}
 
 #[derive(Default, Debug)]
 pub struct Sensor;
 
 #[derive(Bundle)]
 pub struct CharBundle {
+    pub global_transform: GlobalTransform,
+    pub transform: Transform,
     pub controller: Character,
     pub body: RigidBody,
 }
@@ -34,11 +59,62 @@ pub struct SensorListenerState {
 
 pub fn character_controller_system(
     time: Res<Time>,
+    mut active: ResMut<ActiveCameras>,
     input: Res<Input<KeyCode>>,
-    mut players: Query<With<Character, Mut<RigidBody>>>,
+    mouse: Res<Events<MouseMotion>>,
+    mut players: Query<(Mut<Character>, Mut<RigidBody>)>,
+    mut cameras: Query<With<Camera, Mut<Transform>>>,
+    mut fp: Query<With<FirstPersonCamera, (Entity, Mut<Camera>)>>,
+    mut debug: Query<With<FlyCamera, (Entity, Mut<Camera>, Mut<Transform>)>>,
 ) {
     let delta_time = time.delta.as_secs_f32();
-    for mut body in &mut players.iter() {
+    for (mut controller, mut body) in &mut players.iter() {
+        if input.just_pressed(KeyCode::G) {
+            controller.active = !controller.active;
+            if controller.active {
+                for (e, mut camera) in &mut fp.iter() {
+                    active.cameras.insert("Camera3d".to_string(), Some(e));
+                    camera.name = Some("Camera3d".to_string());
+                }
+                for (_, mut camera, _) in &mut debug.iter() {
+                    camera.name = Some("None".to_string());
+                }
+            } else {
+                for (e, mut camera, mut transform) in &mut debug.iter() {
+                    transform.set_translation(Vec3::new(body.position.x(), 1.6, body.position.y()));
+                    transform.set_rotation(Quat::from_rotation_ypr(
+                        controller.yrot,
+                        controller.xrot,
+                        0.0,
+                    ));
+                    active.cameras.insert("Camera3d".to_string(), Some(e));
+                    camera.name = Some("Camera3d".to_string());
+                }
+                for (_, mut camera) in &mut fp.iter() {
+                    camera.name = Some("None".to_string());
+                }
+            }
+        }
+
+        if !controller.active {
+            continue;
+        }
+        let mut yrot = 0.0;
+        let mut xrot = 0.0;
+        for motion in controller.reader.iter(&mouse) {
+            yrot -= motion.delta.x() * delta_time * MOUSE_SPEED;
+            xrot -= motion.delta.y() * delta_time * MOUSE_SPEED;
+        }
+        controller.yrot += yrot;
+        controller.xrot += xrot;
+        if let Some(e) = active.get(CAMERA3D) {
+            let mut camera = cameras.get_mut::<Transform>(e).unwrap();
+            camera.set_rotation(Quat::from_rotation_ypr(
+                controller.yrot,
+                controller.xrot,
+                0.0,
+            ));
+        }
         let mut addvel = Vec2::new(0.0, 0.0);
         if input.pressed(KeyCode::W) {
             *addvel.y_mut() -= INC_SPEED;
@@ -53,7 +129,8 @@ pub fn character_controller_system(
             *addvel.x_mut() += INC_SPEED;
         }
 
-        body.velocity += addvel * delta_time;
+        let rot = Mat2::from_angle(-controller.yrot);
+        body.velocity += rot * addvel * delta_time;
 
         if body.velocity.length() > MAX_SPEED {
             body.velocity = body.velocity.normalize() * MAX_SPEED;
