@@ -133,7 +133,7 @@ pub fn room_system(
             body.set_active(false);
             if connection.open {
                 body.rotation -= 90.0_f32.to_radians();
-                let rot = Mat2::from_angle(body.rotation);
+                let rot = Mat2::from_angle(-body.rotation);
                 let offset = rot * Vec2::new(0.5, 0.5);
                 body.position -= offset;
                 body.set_sensor(false);
