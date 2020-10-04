@@ -10,6 +10,16 @@ use crate::room::*;
 
 pub mod walls;
 
+#[derive(Default, Debug, Clone, Copy)]
+pub struct Connection {
+    pub open: bool,
+}
+
+#[derive(Bundle)]
+pub struct DoorBundle {
+    connection: Connection,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Door {
     // -z
@@ -225,7 +235,6 @@ pub fn spawn(
                 .position(position)
                 .rotation(rotation)
                 .shape(Vec2::new(-0.5, 0.0), width, height);
-            body.set_sensor(true);
             commands
                 .spawn(PbrComponents {
                     draw: Draw {
@@ -235,6 +244,9 @@ pub fn spawn(
                     mesh: prop_door,
                     material: materials.add(Color::rgb(1.0, 1.0, 1.0).into()),
                     ..Default::default()
+                })
+                .with_bundle(DoorBundle {
+                    connection: Connection::default(),
                 })
                 .with(Parent(current))
                 .with(body);

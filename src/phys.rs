@@ -125,12 +125,12 @@ impl RigidBody {
 
 #[derive(Debug, Clone, Copy)]
 pub struct Manifold {
-    a: Entity,
-    b: Entity,
-    p_x: f32,
-    p_y: f32,
-    n_x: f32,
-    n_y: f32,
+    pub a: Entity,
+    pub b: Entity,
+    pub p_x: f32,
+    pub p_y: f32,
+    pub n_x: f32,
+    pub n_y: f32,
 }
 
 pub fn collide(
