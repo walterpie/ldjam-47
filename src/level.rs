@@ -414,7 +414,7 @@ pub fn new() -> LevelPrototype {
         depth: 8.0,
         doors: vec![Door::West].into_iter().collect(),
         edges: vec![EdgePrototype {
-            index: 22,
+            index: 21,
             from: Door::West,
             to: Door::North,
         }],
