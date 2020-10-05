@@ -16,27 +16,40 @@ use room::*;
 
 pub mod array;
 pub mod character;
+pub mod faux;
 pub mod level;
 pub mod phys;
 pub mod proc;
 pub mod room;
 
+pub const FAUX: bool = false;
+
 fn main() {
-    App::build()
+    let mut builder = App::build();
+    builder
         .add_default_plugins()
         .add_plugin(FlyCameraPlugin)
         .init_resource::<Friction>()
         .init_resource::<SensorListenerState>()
         .add_event::<Manifold>()
-        .add_startup_system(setup.system())
-        .add_system_to_stage(stage::LAST, room_system.system())
-        .add_system_to_stage(stage::LAST, visible_parent_system.system())
-        .add_system_to_stage(stage::FIRST, character_controller_system.system())
-        .add_system_to_stage(stage::POST_UPDATE, sensor_system.system())
-        .add_system_to_stage(stage::UPDATE, physics_system.system())
-        .add_system_to_stage(stage::UPDATE, joints_system.system())
-        .add_system_to_stage(stage::UPDATE, debug_draw_system.system())
-        .run();
+        .add_startup_system(setup.system());
+    if FAUX {
+        builder
+            .add_system_to_stage(stage::FIRST, character_controller_system.system())
+            .add_system_to_stage(stage::UPDATE, physics_system.system())
+            .add_system_to_stage(stage::UPDATE, joints_system.system())
+            .run()
+    } else {
+        builder
+            .add_system_to_stage(stage::LAST, room_system.system())
+            .add_system_to_stage(stage::LAST, visible_parent_system.system())
+            .add_system_to_stage(stage::FIRST, character_controller_system.system())
+            .add_system_to_stage(stage::POST_UPDATE, sensor_system.system())
+            .add_system_to_stage(stage::UPDATE, physics_system.system())
+            .add_system_to_stage(stage::UPDATE, joints_system.system())
+            .add_system_to_stage(stage::UPDATE, debug_draw_system.system())
+            .run()
+    }
 }
 
 fn setup(
@@ -113,8 +126,12 @@ fn setup(
     //     clone_probability: 1.0,
     // };
     // let level = proc::generate(&params);
-    let level = level::new();
-    proc::spawn(&mut commands, &assets, &mut meshes, &mut materials, &level);
+    if FAUX {
+        faux::spawn(&mut commands, &assets, &mut meshes, &mut materials);
+    } else {
+        let level = level::new();
+        proc::spawn(&mut commands, &assets, &mut meshes, &mut materials, &level);
+    }
 }
 
 pub fn room_system(
