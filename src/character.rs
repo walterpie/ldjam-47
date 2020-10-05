@@ -27,6 +27,7 @@ pub struct Character {
     reader: EventReader<MouseMotion>,
     bob: f32,
     toggle_bob: bool,
+    bob_direction: f32,
 }
 
 impl Default for Character {
@@ -38,6 +39,7 @@ impl Default for Character {
             reader: Default::default(),
             bob: 0.0,
             toggle_bob: true,
+            bob_direction: 0.0,
         }
     }
 }
@@ -73,6 +75,8 @@ pub fn character_controller_system(
     mut active: ResMut<ActiveCameras>,
     input: Res<Input<KeyCode>>,
     mouse: Res<Events<MouseMotion>>,
+    assets: Res<AssetServer>,
+    audio: Res<AudioOutput>,
     mut players: Query<(Mut<Character>, Mut<RigidBody>)>,
     mut cameras: Query<With<Camera, Mut<Transform>>>,
     mut fp: Query<With<FirstPersonCamera, (Entity, Mut<Camera>)>>,
@@ -80,6 +84,7 @@ pub fn character_controller_system(
 ) {
     let delta_time = time.delta.as_secs_f32();
     for (mut controller, mut body) in &mut players.iter() {
+        let play_sound_start = controller.bob.sin();
         let bob = if controller.toggle_bob {
             controller.bob
         } else {
@@ -164,11 +169,24 @@ pub fn character_controller_system(
         if body.velocity.length() > MAX_SPEED {
             body.velocity = body.velocity.normalize() * MAX_SPEED;
         }
+
+        let play_sound_end = controller.bob.sin();
+        let old = controller.bob_direction;
+        let new = play_sound_end - play_sound_start;
+
+        if new.signum() > old.signum() {
+            let step = assets.load("assets/sound/step.mp3").unwrap();
+            audio.play(step);
+        }
+
+        controller.bob_direction = play_sound_end - play_sound_start;
     }
 }
 
 pub fn sensor_system(
     mut commands: Commands,
+    assets: Res<AssetServer>,
+    audio: Res<AudioOutput>,
     input: Res<Input<KeyCode>>,
     events: Res<Events<Manifold>>,
     mut state: ResMut<SensorListenerState>,
@@ -252,6 +270,8 @@ pub fn sensor_system(
             if let Ok(mut conn) = connection.get_mut::<Connection>(manifold.b) {
                 if input.just_pressed(KeyCode::Space) {
                     let mut body = bodies.get_mut::<RigidBody>(manifold.b).unwrap();
+                    let step = assets.load("assets/sound/door.mp3").unwrap();
+                    audio.play(step);
                     conn.open = !conn.open;
                     if !conn.open {
                         body.rotation -= 90.0_f32.to_radians();

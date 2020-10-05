@@ -190,6 +190,8 @@ fn setup(
 pub fn room_system(
     mut commands: Commands,
     current: Res<CurrentRoom>,
+    assets: Res<AssetServer>,
+    audio: Res<AudioOutput>,
     mut query: Query<(Entity, &Edges, &Name, &Props)>,
     mut is_active: Query<&ActiveRoom>,
     connected: Query<(Mut<RigidBody>, Mut<Draw>)>,
@@ -227,6 +229,10 @@ pub fn room_system(
         let mut body = connected.get_mut::<RigidBody>(current).unwrap();
         body.set_active(true);
         if is_active.get::<ActiveRoom>(current).is_err() {
+            if name.get() == "Abjection" {
+                let music = assets.load("assets/sound/music.mp3").unwrap();
+                audio.play(music);
+            }
             body.position = Vec2::zero();
             body.rotation = 0.0;
             commands.insert_one(current, ActiveRoom);
