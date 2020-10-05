@@ -28,15 +28,20 @@ pub struct RoomBundle {
 #[derive(Debug)]
 pub struct Name {
     name: String,
+    desc: String,
 }
 
 impl Name {
-    pub fn new(name: String) -> Self {
-        Self { name }
+    pub fn new(name: String, desc: String) -> Self {
+        Self { name, desc }
     }
 
     pub fn get(&self) -> &str {
         &self.name
+    }
+
+    pub fn description(&self) -> &str {
+        &self.desc
     }
 }
 

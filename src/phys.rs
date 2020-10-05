@@ -514,9 +514,9 @@ pub fn debug_draw_system(
         };
         let handle = meshes.add(mesh);
         let color = if body.sensor {
-            Color::rgb(0.0, 0.0, 1.0)
+            Color::rgba(0.0, 0.0, 1.0, 0.0)
         } else {
-            Color::rgb(1.0, 0.0, 0.0)
+            Color::rgba(1.0, 0.0, 0.0, 0.0)
         };
         commands
             .spawn(PbrComponents {

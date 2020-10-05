@@ -115,6 +115,7 @@ pub struct PropPrototype {
 #[derive(Debug, Clone)]
 pub struct RoomPrototype {
     pub name: String,
+    pub description: String,
     pub color: Color,
     pub width: f32,
     pub depth: f32,
@@ -291,7 +292,7 @@ pub fn spawn(
         commands
             .spawn(RoomBundle {
                 marker: RoomMarker,
-                name: Name::new(room.name.clone()),
+                name: Name::new(room.name.clone(), room.description.clone()),
                 body,
                 props: props.clone(),
             })
@@ -493,6 +494,7 @@ pub fn generate(params: &Parameters) -> LevelPrototype {
             rand::random::<f32>() * (params.max_height - params.min_height) + params.min_height;
         let room = RoomPrototype {
             name: "Unnamed".to_string(),
+            description: "None".to_string(),
             color: Color::rgb(1.0, 1.0, 1.0),
             width,
             height,

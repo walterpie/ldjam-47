@@ -7,6 +7,7 @@ use crate::room::*;
 pub fn new() -> LevelPrototype {
     let r1a = RoomPrototype {
         name: "Bedroom".to_string(),
+        description: "I should get some soy milk.".to_string(),
         color: Color::rgb(1.0, 1.0, 1.0),
         width: 12.0,
         height: 2.0,
@@ -25,6 +26,7 @@ pub fn new() -> LevelPrototype {
     };
     let r2 = RoomPrototype {
         name: "Corridor".to_string(),
+        description: "Shoes, keys, wallet, phone, got everything.".to_string(),
         color: Color::rgb(1.0, 1.0, 1.0),
         width: 2.0,
         height: 2.0,
@@ -39,6 +41,7 @@ pub fn new() -> LevelPrototype {
     };
     let r1b = RoomPrototype {
         name: r1a.name.clone(),
+        description: "I should get some soy milk.".to_string(),
         color: Color::rgb(1.0, 1.0, 1.0),
         width: r1a.width,
         height: r1a.height,
@@ -53,6 +56,7 @@ pub fn new() -> LevelPrototype {
     };
     let r3a = RoomPrototype {
         name: "Abjection".to_string(),
+        description: "Shoes, keys... This isn't my corridor.".to_string(),
         color: Color::rgb(0.9, 1.0, 1.0),
         width: 4.0,
         height: 2.0,
@@ -74,6 +78,7 @@ pub fn new() -> LevelPrototype {
     };
     let r3b = RoomPrototype {
         name: r3a.name.clone(),
+        description: "This still isn't my corridor.".to_string(),
         color: Color::rgb(0.9, 1.0, 1.0),
         width: r3a.width,
         height: r3a.height,
@@ -88,6 +93,7 @@ pub fn new() -> LevelPrototype {
     };
     let r4a = RoomPrototype {
         name: "Gloom".to_string(),
+        description: "Huh, nice flower.".to_string(),
         color: Color::rgb(0.9, 1.0, 1.0),
         width: 8.0,
         height: 2.0,
@@ -113,6 +119,7 @@ pub fn new() -> LevelPrototype {
     };
     let r4b = RoomPrototype {
         name: r4a.name.clone(),
+        description: "Huh, lovely flower.".to_string(),
         color: Color::rgb(0.9, 1.0, 1.0),
         width: r4a.width,
         height: r4a.height,
@@ -134,6 +141,7 @@ pub fn new() -> LevelPrototype {
     };
     let r4c = RoomPrototype {
         name: r4a.name.clone(),
+        description: "Huh, pretty flower.".to_string(),
         color: Color::rgb(0.9, 1.0, 1.0),
         width: r4a.width,
         height: r4a.height,
@@ -155,6 +163,7 @@ pub fn new() -> LevelPrototype {
     };
     let r4d = RoomPrototype {
         name: r4a.name.clone(),
+        description: "Huh, flower.".to_string(),
         color: Color::rgb(0.9, 1.0, 1.0),
         width: r4a.width,
         height: r4a.height,
@@ -176,6 +185,7 @@ pub fn new() -> LevelPrototype {
     };
     let r4e = RoomPrototype {
         name: r4a.name.clone(),
+        description: "Huh, ugly flower.".to_string(),
         color: Color::rgb(0.9, 1.0, 1.0),
         width: r4a.width,
         height: r4a.height,
@@ -197,6 +207,7 @@ pub fn new() -> LevelPrototype {
     };
     let r4f = RoomPrototype {
         name: r4a.name.clone(),
+        description: "Huh, terrible flower.".to_string(),
         color: Color::rgb(0.9, 1.0, 1.0),
         width: r4a.width,
         height: r4a.height,
@@ -218,6 +229,7 @@ pub fn new() -> LevelPrototype {
     };
     let r4g = RoomPrototype {
         name: r4a.name.clone(),
+        description: "Huh, florpy flower.".to_string(),
         color: Color::rgb(0.9, 1.0, 1.0),
         width: r4a.width,
         height: r4a.height,
@@ -239,6 +251,7 @@ pub fn new() -> LevelPrototype {
     };
     let r5a = RoomPrototype {
         name: "Betterment".to_string(),
+        description: "Now where was I? Soy milk.".to_string(),
         color: Color::rgb(0.775, 1.0, 1.0),
         width: 64.0,
         height: 2.0,

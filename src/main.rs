@@ -21,6 +21,7 @@ pub mod level;
 pub mod phys;
 pub mod proc;
 pub mod room;
+pub mod text;
 
 pub const FAUX: bool = false;
 
@@ -48,6 +49,7 @@ fn main() {
             .add_system_to_stage(stage::UPDATE, physics_system.system())
             .add_system_to_stage(stage::UPDATE, joints_system.system())
             .add_system_to_stage(stage::UPDATE, debug_draw_system.system())
+            .add_system_to_stage(stage::UPDATE, text::text_system.system())
             .run()
     }
 }
@@ -56,10 +58,15 @@ fn setup(
     mut commands: Commands,
     assets: Res<AssetServer>,
     mut meshes: ResMut<Assets<Mesh>>,
+    mut fonts: ResMut<Assets<Font>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
+    mut ui_mats: ResMut<Assets<ColorMaterial>>,
 ) {
     let char_player = assets
         .load_sync(&mut meshes, "assets/mesh/char_player.gltf")
+        .unwrap();
+    let font = assets
+        .load_sync(&mut fonts, "assets/font/TruenoLight-E2pg.ttf")
         .unwrap();
     let mut character = None;
     let mut sensor = None;
@@ -110,7 +117,50 @@ fn setup(
             },
             ..Default::default()
         })
-        .with(FlyCamera::default());
+        .with(FlyCamera::default())
+        .spawn(UiCameraComponents::default())
+        .spawn(NodeComponents {
+            style: Style {
+                justify_content: JustifyContent::Center,
+                size: Size::new(Val::Percent(100.0), Val::Percent(100.0)),
+                flex_direction: FlexDirection::ColumnReverse,
+                ..Default::default()
+            },
+            material: ui_mats.add(Color::NONE.into()),
+            ..Default::default()
+        })
+        .with_children(|parent| {
+            parent
+                .spawn(NodeComponents {
+                    style: Style {
+                        // align_self: AlignSelf::Center,
+                        justify_content: JustifyContent::Center,
+                        align_items: AlignItems::Center,
+                        size: Size::new(Val::Percent(50.0), Val::Px(80.0)),
+                        ..Default::default()
+                    },
+                    material: ui_mats.add(Color::rgba(0.05, 0.05, 0.05, 0.8).into()),
+                    ..Default::default()
+                })
+                .with(text::TextFrame(font, false))
+                .with_children(|_| {})
+                .spawn(NodeComponents {
+                    style: Style {
+                        // align_self: AlignSelf::Center,
+                        justify_content: JustifyContent::FlexStart,
+                        align_items: AlignItems::FlexStart,
+                        flex_direction: FlexDirection::ColumnReverse,
+                        size: Size::new(Val::Auto, Val::Auto),
+                        min_size: Size::new(Val::Auto, Val::Px(40.0)),
+                        max_size: Size::new(Val::Percent(100.0), Val::Px(120.0)),
+                        ..Default::default()
+                    },
+                    material: ui_mats.add(Color::rgba(0.05, 0.05, 0.05, 0.8).into()),
+                    ..Default::default()
+                })
+                .with(text::TextFrame(font, true))
+                .with_children(|_| {});
+        });
     // let params = Parameters {
     //     size: 10,
     //     min_size: 4.0,
@@ -142,6 +192,7 @@ pub fn room_system(
     connected: Query<(Mut<RigidBody>, Mut<Draw>)>,
     mut rooms: Query<With<RoomMarker, Entity>>,
     mut connections: Query<(Entity, Mut<Connection>)>,
+    mut frames: Query<(Entity, &text::TextFrame, &Children)>,
 ) {
     let any_active = is_active.iter().iter().count() != 0;
     if !any_active {
@@ -172,7 +223,64 @@ pub fn room_system(
             body.position = Vec2::zero();
             body.rotation = 0.0;
             commands.insert_one(current, ActiveRoom);
-            eprintln!("* Entering {:?}", name.get());
+            for (e, &text::TextFrame(font, is_desc), children) in &mut frames.iter() {
+                for &child in children.iter() {
+                    commands.despawn_recursive(child);
+                }
+                if !is_desc {
+                    commands
+                        .spawn(TextComponents {
+                            style: Style {
+                                size: Size::new(Val::Auto, Val::Px(80.0)),
+                                ..Default::default()
+                            },
+                            text: Text {
+                                value: name.get().to_string(),
+                                font,
+                                style: TextStyle {
+                                    font_size: 80.0,
+                                    color: Color::WHITE,
+                                },
+                            },
+                            ..Default::default()
+                        })
+                        .with(text::Fading {
+                            alpha: 3.0,
+                            fade: 0.5,
+                        })
+                        .with(Parent(e));
+                } else {
+                    for (i, line) in name.description().lines().enumerate() {
+                        commands
+                            .spawn(TextComponents {
+                                style: Style {
+                                    align_self: AlignSelf::FlexStart,
+                                    position: Rect {
+                                        top: Val::Px(40.0 * i as f32),
+                                        bottom: Val::Auto,
+                                        ..Default::default()
+                                    },
+                                    size: Size::new(Val::Auto, Val::Px(40.0)),
+                                    ..Default::default()
+                                },
+                                text: Text {
+                                    value: format!("* {} *", line),
+                                    font,
+                                    style: TextStyle {
+                                        font_size: 40.0,
+                                        color: Color::WHITE,
+                                    },
+                                },
+                                ..Default::default()
+                            })
+                            .with(text::Fading {
+                                alpha: 2.0,
+                                fade: 0.5,
+                            })
+                            .with(Parent(e));
+                    }
+                }
+            }
         }
     }
 
