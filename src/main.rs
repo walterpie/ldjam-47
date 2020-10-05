@@ -99,12 +99,12 @@ fn setup(
         .for_current_entity(|e| sensor = Some(e))
         .spawn((Joint::new(character.unwrap(), sensor.unwrap()),))
         .spawn(LightComponents {
-            transform: Transform::from_translation(Vec3::new(0.0, 1.6, 0.0)),
+            transform: Transform::from_translation(Vec3::new(0.0, 1.4, 0.0)),
             ..Default::default()
         })
         .with(Parent(character.unwrap()))
         .spawn(Camera3dComponents {
-            transform: Transform::from_translation(Vec3::new(0.0, 1.6, 0.0)),
+            transform: Transform::from_translation(Vec3::new(0.0, 1.4, 0.0)),
             camera: Camera {
                 name: Some(CAMERA3D.to_string()),
                 ..Default::default()
@@ -193,7 +193,7 @@ pub fn room_system(
     mut query: Query<(Entity, &Edges, &Name, &Props)>,
     mut is_active: Query<&ActiveRoom>,
     connected: Query<(Mut<RigidBody>, Mut<Draw>)>,
-    mut rooms: Query<With<RoomMarker, Entity>>,
+    mut rooms: Query<With<RoomMarker, (Entity, &Props)>>,
     mut connections: Query<(Entity, Mut<Connection>)>,
     mut frames: Query<(Entity, &text::TextFrame, &Children)>,
 ) {
@@ -211,9 +211,13 @@ pub fn room_system(
                 connection.open = false;
             }
         }
-        for e in &mut rooms.iter() {
+        for (e, props) in &mut rooms.iter() {
             connected.get_mut::<RigidBody>(e).unwrap().set_active(false);
             connected.get_mut::<Draw>(e).unwrap().is_visible = false;
+            for &e in &props.vec {
+                connected.get_mut::<RigidBody>(e).unwrap().set_active(false);
+                connected.get_mut::<Draw>(e).unwrap().is_visible = false;
+            }
         }
     }
     let current = current.entity;

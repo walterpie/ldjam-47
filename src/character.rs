@@ -103,7 +103,7 @@ pub fn character_controller_system(
         //         }
         //     } else {
         //         for (e, mut camera, mut transform) in &mut debug.iter() {
-        //             transform.set_translation(Vec3::new(body.position.x(), 1.6, body.position.y()));
+        //             transform.set_translation(Vec3::new(body.position.x(), 1.4, body.position.y()));
         //             transform.set_rotation(Quat::from_rotation_ypr(
         //                 controller.yrot,
         //                 controller.xrot,
@@ -135,7 +135,7 @@ pub fn character_controller_system(
             .min(90.0_f32.to_radians());
         if let Some(e) = active.get(CAMERA3D) {
             let mut camera = cameras.get_mut::<Transform>(e).unwrap();
-            camera.set_translation(Vec3::new(bob_x, 1.6 + bob_y, 0.0));
+            camera.set_translation(Vec3::new(bob_x, 1.4 + bob_y, 0.0));
             camera.set_rotation(Quat::from_rotation_ypr(
                 controller.yrot,
                 controller.xrot,
