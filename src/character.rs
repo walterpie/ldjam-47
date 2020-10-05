@@ -1,3 +1,4 @@
+use std::f32::consts::PI;
 use std::mem;
 
 use bevy::input::mouse::MouseMotion;
@@ -12,8 +13,9 @@ use crate::proc::{Connection, RoomSensor};
 use crate::room::*;
 
 pub const MOUSE_SPEED: f32 = 0.03;
-pub const MAX_SPEED: f32 = 2.5;
-pub const INC_SPEED: f32 = 5.0;
+pub const BOB_SPEED: f32 = 5.0;
+pub const MAX_SPEED: f32 = 1.5;
+pub const INC_SPEED: f32 = 3.0;
 
 #[derive(Default)]
 pub struct FirstPersonCamera;
@@ -23,6 +25,8 @@ pub struct Character {
     yrot: f32,
     xrot: f32,
     reader: EventReader<MouseMotion>,
+    bob: f32,
+    toggle_bob: bool,
 }
 
 impl Default for Character {
@@ -32,6 +36,8 @@ impl Default for Character {
             yrot: 0.0,
             xrot: 0.0,
             reader: Default::default(),
+            bob: 0.0,
+            toggle_bob: true,
         }
     }
 }
@@ -74,32 +80,43 @@ pub fn character_controller_system(
 ) {
     let delta_time = time.delta.as_secs_f32();
     for (mut controller, mut body) in &mut players.iter() {
-        if input.just_pressed(KeyCode::G) {
-            controller.active = !controller.active;
-            if controller.active {
-                for (e, mut camera) in &mut fp.iter() {
-                    active.cameras.insert("Camera3d".to_string(), Some(e));
-                    camera.name = Some("Camera3d".to_string());
-                }
-                for (_, mut camera, _) in &mut debug.iter() {
-                    camera.name = Some("None".to_string());
-                }
-            } else {
-                for (e, mut camera, mut transform) in &mut debug.iter() {
-                    transform.set_translation(Vec3::new(body.position.x(), 1.6, body.position.y()));
-                    transform.set_rotation(Quat::from_rotation_ypr(
-                        controller.yrot,
-                        controller.xrot,
-                        0.0,
-                    ));
-                    active.cameras.insert("Camera3d".to_string(), Some(e));
-                    camera.name = Some("Camera3d".to_string());
-                }
-                for (_, mut camera) in &mut fp.iter() {
-                    camera.name = Some("None".to_string());
-                }
-            }
+        let bob = if controller.toggle_bob {
+            controller.bob
+        } else {
+            0.0
+        };
+        let bob_y = bob.sin() * 0.1;
+        let bob_x = (bob / 2.0).sin() * 0.2;
+        let bob_r = (bob / 2.0).sin() * PI / 32.0;
+        if input.just_pressed(KeyCode::B) {
+            controller.toggle_bob = !controller.toggle_bob;
         }
+        // if input.just_pressed(KeyCode::G) {
+        //     controller.active = !controller.active;
+        //     if controller.active {
+        //         for (e, mut camera) in &mut fp.iter() {
+        //             active.cameras.insert("Camera3d".to_string(), Some(e));
+        //             camera.name = Some("Camera3d".to_string());
+        //         }
+        //         for (_, mut camera, _) in &mut debug.iter() {
+        //             camera.name = Some("None".to_string());
+        //         }
+        //     } else {
+        //         for (e, mut camera, mut transform) in &mut debug.iter() {
+        //             transform.set_translation(Vec3::new(body.position.x(), 1.6, body.position.y()));
+        //             transform.set_rotation(Quat::from_rotation_ypr(
+        //                 controller.yrot,
+        //                 controller.xrot,
+        //                 0.0,
+        //             ));
+        //             active.cameras.insert("Camera3d".to_string(), Some(e));
+        //             camera.name = Some("Camera3d".to_string());
+        //         }
+        //         for (_, mut camera) in &mut fp.iter() {
+        //             camera.name = Some("None".to_string());
+        //         }
+        //     }
+        // }
 
         if !controller.active {
             continue;
@@ -112,19 +129,26 @@ pub fn character_controller_system(
         }
         controller.yrot += yrot;
         controller.xrot += xrot;
+        controller.xrot = controller
+            .xrot
+            .max(-90.0_f32.to_radians())
+            .min(90.0_f32.to_radians());
         if let Some(e) = active.get(CAMERA3D) {
             let mut camera = cameras.get_mut::<Transform>(e).unwrap();
+            camera.set_translation(Vec3::new(bob_x, 1.6 + bob_y, 0.0));
             camera.set_rotation(Quat::from_rotation_ypr(
                 controller.yrot,
                 controller.xrot,
-                0.0,
+                bob_r,
             ));
         }
         let mut addvel = Vec2::new(0.0, 0.0);
         if input.pressed(KeyCode::W) {
+            controller.bob += delta_time * BOB_SPEED;
             *addvel.y_mut() -= INC_SPEED;
         }
         if input.pressed(KeyCode::S) {
+            controller.bob -= delta_time * BOB_SPEED;
             *addvel.y_mut() += INC_SPEED;
         }
         if input.pressed(KeyCode::A) {

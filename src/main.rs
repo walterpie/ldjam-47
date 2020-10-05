@@ -7,6 +7,7 @@ use bevy::math::*;
 use bevy::prelude::*;
 use bevy::render::camera::*;
 use bevy::render::render_graph::base::camera::CAMERA3D;
+use bevy::winit::WinitWindows;
 use bevy_fly_camera::{FlyCamera, FlyCameraPlugin};
 
 use character::*;
@@ -32,6 +33,7 @@ fn main() {
         .add_plugin(FlyCameraPlugin)
         .init_resource::<Friction>()
         .init_resource::<SensorListenerState>()
+        .add_resource(MouseGrabbed(true))
         .add_event::<Manifold>()
         .add_startup_system(setup.system());
     if FAUX {
@@ -50,6 +52,7 @@ fn main() {
             .add_system_to_stage(stage::UPDATE, joints_system.system())
             .add_system_to_stage(stage::UPDATE, debug_draw_system.system())
             .add_system_to_stage(stage::UPDATE, text::text_system.system())
+            .add_system_to_stage(stage::UPDATE, grab_mouse_system.system())
             .run()
     }
 }
@@ -79,9 +82,9 @@ fn setup(
             transform: Default::default(),
             controller: Character::default(),
             body: RigidBody::new(Status::Semikinematic, 1.0, 0.5).shape(
-                Vec2::new(-0.25, -0.25),
-                0.5,
-                0.5,
+                Vec2::new(-0.1, -0.1),
+                0.2,
+                0.2,
             ),
         })
         .for_current_entity(|e| character = Some(e))
@@ -331,5 +334,23 @@ pub fn visible_parent_system(
         if let Ok(mut body) = bodies.get_mut::<RigidBody>(conn.sensor) {
             body.set_active(conn.open);
         }
+    }
+}
+
+struct MouseGrabbed(bool);
+
+fn grab_mouse_system(
+    input: Res<Input<KeyCode>>,
+    winit: Res<WinitWindows>,
+    windows: Res<Windows>,
+    mut grabbed: ResMut<MouseGrabbed>,
+) {
+    if input.just_pressed(KeyCode::Escape) {
+        grabbed.0 = !grabbed.0;
+    }
+    for window in windows.iter() {
+        let window = winit.get_window(window.id).unwrap();
+        let _ = window.set_cursor_grab(grabbed.0);
+        let _ = window.set_cursor_visible(!grabbed.0);
     }
 }
